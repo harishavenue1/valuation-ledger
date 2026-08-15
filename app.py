@@ -32,6 +32,7 @@ CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
 GUIDANCE_DIR = os.path.join(CACHE_DIR, "guidance")
 SCENARIOS_PATH = os.path.join(CACHE_DIR, "scenarios.json")
 ALL_STOCKS_PATH = os.path.join(CACHE_DIR, "all_stocks.json")
+LAST_REFRESH_PATH = os.path.join(CACHE_DIR, "last_refresh.json")
 
 FY_LABEL_RE = re.compile(r"^(Mar|Jun|Sep|Dec)\s+\d{4}$")
 ARRAY_FIELDS = ["revenue", "revenue_growth_pct", "expenses", "operating_profit", "opm_pct",
@@ -77,28 +78,70 @@ def clean_stock(raw):
     return stock
 
 
-def load_all_stocks():
-    if not os.path.exists(ALL_STOCKS_PATH):
-        return {}
-    with open(ALL_STOCKS_PATH) as f:
-        raw = json.load(f)
-    return {ticker: clean_stock(v) for ticker, v in raw.items()}
-
-
-def load_raw_all_stocks():
-    """Unclean (TTM column, if any, intact) — only save_all_stocks()
-    should write this shape back out, so a re-clean on next load stays
-    idempotent regardless of how many times a stock gets refreshed."""
+def _local_load_raw_all_stocks():
     if not os.path.exists(ALL_STOCKS_PATH):
         return {}
     with open(ALL_STOCKS_PATH) as f:
         return json.load(f)
 
 
-def save_all_stocks(data):
+def _local_save_raw_all_stocks(data):
     os.makedirs(CACHE_DIR, exist_ok=True)
     with open(ALL_STOCKS_PATH, "w") as f:
         json.dump(data, f, indent=2)
+
+
+def load_raw_all_stocks():
+    """Unclean (TTM column, if any, intact) — only save_all_stocks()
+    should write this shape back out, so a re-clean on next load stays
+    idempotent regardless of how many times a stock gets refreshed.
+    GitHub-synced the same way as scenarios (see _github_synced_load) —
+    company/price data is "all the data" too, not just scenario edits,
+    so it needs to survive a redeploy and match across devices the same
+    way."""
+    cfg = get_github_config()
+    path = cfg["stocks_path"] if cfg else "data/all_stocks.json"
+    return _github_synced_load("all_stocks_raw_cache", "all_stocks_sha", path,
+                                _local_load_raw_all_stocks, _local_save_raw_all_stocks, "company data")
+
+
+def save_all_stocks(data):
+    cfg = get_github_config()
+    path = cfg["stocks_path"] if cfg else "data/all_stocks.json"
+    _github_synced_save(data, "all_stocks_raw_cache", "all_stocks_sha", path,
+                         _local_save_raw_all_stocks, "company data")
+
+
+def load_all_stocks():
+    raw = load_raw_all_stocks()
+    return {ticker: clean_stock(v) for ticker, v in raw.items()}
+
+
+def _local_load_last_refresh():
+    if not os.path.exists(LAST_REFRESH_PATH):
+        return {}
+    with open(LAST_REFRESH_PATH) as f:
+        return json.load(f)
+
+
+def _local_save_last_refresh(data):
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    with open(LAST_REFRESH_PATH, "w") as f:
+        json.dump(data, f, indent=2)
+
+
+def load_last_refresh():
+    """{"date": "YYYY-MM-DD"} of the last successful auto-refresh — kept
+    in GitHub too (not just local) so a visit from any device marks the
+    day done for every device, not just the one that happened to open
+    first."""
+    return _github_synced_load("last_refresh_cache", "last_refresh_sha", "data/last_refresh.json",
+                                _local_load_last_refresh, _local_save_last_refresh, "refresh timestamp")
+
+
+def save_last_refresh(data):
+    _github_synced_save(data, "last_refresh_cache", "last_refresh_sha", "data/last_refresh.json",
+                         _local_save_last_refresh, "refresh timestamp")
 
 
 def load_guidance(ticker):
@@ -153,20 +196,24 @@ def get_github_config():
     except (KeyError, FileNotFoundError):
         return None
     repo = st.secrets.get("GITHUB_REPO", "harishavenue1/valuation-ledger")
-    path = st.secrets.get("GITHUB_DATA_PATH", "data/scenarios.json")
-    return {"token": token, "repo": repo, "path": path}
+    return {
+        "token": token,
+        "repo": repo,
+        "scenarios_path": st.secrets.get("GITHUB_DATA_PATH", "data/scenarios.json"),
+        "stocks_path": st.secrets.get("GITHUB_STOCKS_PATH", "data/all_stocks.json"),
+    }
 
 
 def _github_headers(token):
     return {"Authorization": f"token {token}", "Accept": "application/vnd.github+json"}
 
 
-def github_fetch_scenarios(cfg):
+def github_fetch_json(cfg, path):
     """Returns (data, sha). sha is None both when the file doesn't exist
     yet (first-ever save will create it) and when the fetch failed
     outright — callers distinguish those via the raised/caught error
     happening at the call site, not here."""
-    url = f"https://api.github.com/repos/{cfg['repo']}/contents/{cfg['path']}"
+    url = f"https://api.github.com/repos/{cfg['repo']}/contents/{path}"
     resp = requests.get(url, headers=_github_headers(cfg["token"]), timeout=10)
     if resp.status_code == 404:
         return {}, None
@@ -176,14 +223,14 @@ def github_fetch_scenarios(cfg):
     return json.loads(content), body["sha"]
 
 
-def github_put_scenarios(cfg, data, sha):
+def github_put_json(cfg, path, data, sha, message):
     """Returns the new sha. Raises on failure — caller decides how to
     surface that (local save already succeeded by the time this runs,
     so a failure here never loses data, just skips the cross-device
     sync for this edit)."""
-    url = f"https://api.github.com/repos/{cfg['repo']}/contents/{cfg['path']}"
+    url = f"https://api.github.com/repos/{cfg['repo']}/contents/{path}"
     payload = {
-        "message": "Update scenarios.json via Valuation Ledger app",
+        "message": message,
         "content": base64.b64encode(json.dumps(data, indent=2).encode("utf-8")).decode("ascii"),
     }
     if sha:
@@ -193,51 +240,69 @@ def github_put_scenarios(cfg, data, sha):
     return resp.json()["content"]["sha"]
 
 
-def load_scenarios():
-    if "scenarios_cache" in st.session_state:
-        return st.session_state["scenarios_cache"]
+def _github_synced_load(cache_key, sha_key, github_path, local_loader, local_saver, label):
+    """Shared load pattern for any GitHub-synced JSON store: session-cached,
+    GitHub-preferred, local-file fallback with a one-time warning."""
+    if cache_key in st.session_state:
+        return st.session_state[cache_key]
 
     cfg = get_github_config()
     if cfg:
         try:
-            data, sha = github_fetch_scenarios(cfg)
-            st.session_state["scenarios_sha"] = sha
-            st.session_state["scenarios_cache"] = data
-            _local_save_scenarios(data)  # keep local mirror fresh as offline fallback
+            data, sha = github_fetch_json(cfg, github_path)
+            st.session_state[sha_key] = sha
+            st.session_state[cache_key] = data
+            local_saver(data)  # keep local mirror fresh as offline fallback
             return data
         except Exception as e:
-            st.warning(f"⚠️ Couldn't reach GitHub for scenario sync ({e}) — using local cache. "
+            st.warning(f"⚠️ Couldn't reach GitHub for {label} sync ({e}) — using local cache. "
                        "Edits will still save locally but won't sync until the next successful load.")
 
-    data = _local_load_scenarios()
-    st.session_state["scenarios_cache"] = data
-    st.session_state["scenarios_sha"] = None
+    data = local_loader()
+    st.session_state[cache_key] = data
+    st.session_state[sha_key] = None
     return data
 
 
-def save_scenarios(data):
-    _local_save_scenarios(data)  # always succeeds first — this is the never-lose-data path
-    st.session_state["scenarios_cache"] = data
+def _github_synced_save(data, cache_key, sha_key, github_path, local_saver, label):
+    """Shared save pattern: local write always succeeds first (never lose
+    data), then best-effort push to GitHub with a single stale-sha retry."""
+    local_saver(data)
+    st.session_state[cache_key] = data
 
     cfg = get_github_config()
     if not cfg:
         return
+    message = f"Update {os.path.basename(github_path)} via Valuation Ledger app"
     try:
-        sha = st.session_state.get("scenarios_sha")
-        new_sha = github_put_scenarios(cfg, data, sha)
-        st.session_state["scenarios_sha"] = new_sha
+        sha = st.session_state.get(sha_key)
+        new_sha = github_put_json(cfg, github_path, data, sha, message)
+        st.session_state[sha_key] = new_sha
     except Exception as e:
         # Most common cause: stale sha because another device saved since
         # our last load. Re-fetch once to pick up the latest sha and
         # retry a single time; if that also fails, give up for this save
         # (local copy is already safe) rather than looping.
         try:
-            _, fresh_sha = github_fetch_scenarios(cfg)
-            new_sha = github_put_scenarios(cfg, data, fresh_sha)
-            st.session_state["scenarios_sha"] = new_sha
+            _, fresh_sha = github_fetch_json(cfg, github_path)
+            new_sha = github_put_json(cfg, github_path, data, fresh_sha, message)
+            st.session_state[sha_key] = new_sha
         except Exception as e2:
-            st.warning(f"⚠️ Saved locally, but GitHub sync failed ({e2}). "
+            st.warning(f"⚠️ Saved locally, but GitHub sync of {label} failed ({e2}). "
                        "This device's copy is safe; other devices may be stale until sync recovers.")
+
+
+def load_scenarios():
+    cfg = get_github_config()
+    path = cfg["scenarios_path"] if cfg else "data/scenarios.json"
+    return _github_synced_load("scenarios_cache", "scenarios_sha", path,
+                                _local_load_scenarios, _local_save_scenarios, "scenarios")
+
+
+def save_scenarios(data):
+    cfg = get_github_config()
+    path = cfg["scenarios_path"] if cfg else "data/scenarios.json"
+    _github_synced_save(data, "scenarios_cache", "scenarios_sha", path, _local_save_scenarios, "scenarios")
 
 
 def last_actual(arr):
@@ -506,6 +571,66 @@ def hist_cell_html(v, digits, suffix, colorize, bold):
 
 # ───────────────────────── Summary page ─────────────────────────
 
+def refresh_all_stocks(session_id, show_progress=True):
+    """Re-fetches every tracked ticker from Screener.in and saves (which
+    also GitHub-syncs, see save_all_stocks). Shared by the manual
+    "Refresh all now" button and the once-a-day auto-trigger in
+    maybe_auto_refresh() — same code path either way. Returns the count
+    refreshed."""
+    raw = load_raw_all_stocks()
+    tickers = list(raw.keys())
+    if not tickers:
+        return 0
+    progress = st.progress(0.0, text="Refreshing…") if show_progress else None
+    for i, t in enumerate(tickers):
+        data, err = fetch_one(t, session_id)
+        if not err:
+            raw[t] = data
+        if progress:
+            progress.progress((i + 1) / len(tickers), text=f"Refreshed {t}")
+    save_all_stocks(raw)
+    if progress:
+        progress.empty()
+    return len(tickers)
+
+
+def maybe_auto_refresh():
+    """Once per calendar day, silently refreshes every tracked ticker's
+    price/P&L the first time the app is opened that day — no button
+    click needed, no growth/PE inputs required. The "day is done" flag
+    (data/last_refresh.json) is GitHub-synced like everything else, so
+    whichever device happens to open the app first each day satisfies
+    it for every device, not just that one.
+
+    Blocking: this runs synchronously before the page renders, so the
+    first visitor of the day waits on N sequential Screener.in fetches.
+    Fine for a personal watchlist of a handful of tickers; would need
+    revisiting (e.g. a real scheduler) if the tracked list grows large.
+
+    Gated by st.session_state so it only ever attempts once per browser
+    session — main() (and therefore this) re-runs on every Streamlit
+    rerun, i.e. every widget interaction, not just the initial load."""
+    if st.session_state.get("auto_refresh_checked"):
+        return
+    st.session_state["auto_refresh_checked"] = True
+
+    session_id = get_session_id()
+    if not session_id:
+        return  # nothing to auto-refresh with; manual button already explains why
+
+    today = date.today().isoformat()
+    if load_last_refresh().get("date") == today:
+        return
+
+    raw = load_raw_all_stocks()
+    if raw:
+        with st.spinner(f"Refreshing {len(raw)} tracked companies for today…"):
+            n = refresh_all_stocks(session_id, show_progress=False)
+        if n:
+            st.toast(f"🔄 Auto-refreshed {n} companies for {today}")
+    save_last_refresh({"date": today})
+
+
 def page_summary(all_stocks, scenarios):
     if not all_stocks:
         st.markdown('<div class="vl-empty">No companies yet — retrieve one from Screener.in below.</div>',
@@ -515,17 +640,8 @@ def page_summary(all_stocks, scenarios):
     session_id = get_session_id()
     if st.button("🔄 Refresh all now", disabled=not session_id,
                   help="Re-fetches every company below from Screener.in live"):
-        raw = load_raw_all_stocks()
-        progress = st.progress(0.0, text="Refreshing…")
-        tickers = list(raw.keys())
-        for i, t in enumerate(tickers):
-            data, err = fetch_one(t, session_id)
-            if not err:
-                raw[t] = data
-            progress.progress((i + 1) / len(tickers), text=f"Refreshed {t}")
-        save_all_stocks(raw)
-        progress.empty()
-        st.success(f"Refreshed {len(tickers)} companies.")
+        n = refresh_all_stocks(session_id)
+        st.success(f"Refreshed {n} companies.")
         st.rerun()
 
     col_widths = [2.2, 0.8, 0.6, 1.05, 1.05, 1.05, 1.05, 0.75, 0.55]
@@ -850,6 +966,8 @@ def section_retrieve(all_stocks):
 def main():
     inject_css()
     st.title("🧮 Valuation Ledger")
+
+    maybe_auto_refresh()  # before load_all_stocks(), so a same-day refresh renders fresh, not stale
 
     all_stocks = load_all_stocks()
     scenarios = load_scenarios()
