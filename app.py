@@ -44,6 +44,15 @@ CASE_LABEL = {"base": "Base Case", "bull": "Bull Case", "bear": "Bear Case", "mg
 CASE_COLOR = {"base": "#B7C0BB", "bull": "#63C46E", "bear": "#E3776A", "mgmt": "#C4A8E8"}
 N_EST_YEARS = 3
 
+# Management Case is dropped from the Future Projections grid and the
+# Summary page table (explicit request, 2026-08-15) — it's never
+# guidance-seeded anyway and stayed blank/unused in both most of the
+# time. It's still fully available via each company's Detail-page chip
+# row and Key Assumptions. Scenario data already saved for "mgmt" is
+# left untouched — nothing here deletes it, this constant just controls
+# which cases get columns/chips in these two views.
+GRID_CASES = [c for c in CASES if c != "mgmt"]
+
 st.set_page_config(page_title="Valuation Ledger", page_icon="🧮", layout="wide")
 
 
@@ -644,27 +653,31 @@ def page_summary(all_stocks, scenarios):
         st.success(f"Refreshed {n} companies.")
         st.rerun()
 
-    col_widths = [2.2, 0.8, 0.6, 1.05, 1.05, 1.05, 1.05, 0.75, 0.55]
-    header_labels = ["Company", "Price", "P/E", "Base", "Bull", "Bear", "Mgmt", "", ""]
+    # GRID_CASES (module-level, excludes "mgmt") drives these columns too
+    # — see its definition for why.
+    col_widths = [2.2, 0.8, 0.6, 1.05, 1.05, 1.05, 0.75, 0.55]
+    header_labels = ["Company", "Price", "P/E"] + [CASE_LABEL[c].replace(" Case", "") for c in GRID_CASES] + ["", ""]
     header = st.columns(col_widths)
     for col, label in zip(header, header_labels):
         col.markdown(f"**{label}**")
     st.markdown('<hr style="margin:2px 0 8px;border-color:var(--vl-border);">', unsafe_allow_html=True)
 
+    n_case_cols = len(GRID_CASES)
+    open_col, remove_col = 3 + n_case_cols, 4 + n_case_cols
     for ticker, stock in all_stocks.items():
         cols = st.columns(col_widths)
         cols[0].markdown(f"**{stock['name']}**  \n<span class='vl-sub'>{ticker}</span>", unsafe_allow_html=True)
         cols[1].write(f"₹{fmt(stock.get('current_price'))}")
         cols[2].write(f"{fmt(stock.get('pe_ratio'), 1)}x")
-        for i, case in enumerate(CASES):
+        for i, case in enumerate(GRID_CASES):
             state = get_case_state(scenarios, stock, ticker, case)
             h = headline_cagr(stock, state)
             sub = f"₹{fmt(h['share_price'])} · FY{h['year']}" if h and h["cagr"] is not None else "fill PE"
             cols[3 + i].markdown(cagr_html(h["cagr"] if h else None, sub), unsafe_allow_html=True)
-        if cols[7].button("🔍", key=f"open_{ticker}", help=f"Open {stock['name']}", use_container_width=True):
+        if cols[open_col].button("🔍", key=f"open_{ticker}", help=f"Open {stock['name']}", use_container_width=True):
             st.session_state["_jump_to"] = ticker
             st.rerun()
-        if cols[8].button("🗑️", key=f"remove_{ticker}", help=f"Remove {stock['name']} from tracking", use_container_width=True):
+        if cols[remove_col].button("🗑️", key=f"remove_{ticker}", help=f"Remove {stock['name']} from tracking", use_container_width=True):
             raw = load_raw_all_stocks()
             raw.pop(ticker, None)
             save_all_stocks(raw)
@@ -757,15 +770,9 @@ def render_projections_grid(stock, ticker, scenarios):
     as columns in that same row, uses the width instead of the scroll."""
     st.subheader("🎯 Future Projections & CAGR — all cases, all years, one grid")
 
-    # Management Case is dropped from this grid specifically (explicit
-    # request, 2026-08-15) — it's never guidance-seeded anyway and stayed
-    # blank/unused here most of the time. It's still fully available via
-    # the Base/Bull/Bear/Mgmt chip row above and the Summary page; this
-    # just stops giving it grid columns and a Key Assumptions box. Any
-    # Mgmt scenario data already saved elsewhere is left untouched — the
-    # persist loop below only writes back drivers for the cases actually
-    # rendered here.
-    GRID_CASES = [c for c in CASES if c != "mgmt"]
+    # GRID_CASES (module-level) excludes "mgmt" here too — see its
+    # definition for why. The persist loop below only writes back
+    # drivers for the cases actually rendered in this grid.
 
     guidance = load_guidance(ticker)
     if guidance:
