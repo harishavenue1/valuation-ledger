@@ -105,5 +105,42 @@
       ],
       "assumptions": ""
     }
+  },
+  "SAKAR": {
+    "base": {
+      "drivers": [
+        {
+          "revGrowth": 30.0,
+          "opm": 27.0,
+          "tax": 23.0,
+          "other_income": 2.0,
+          "interest": 8.0,
+          "depreciation": 24.0,
+          "shares": 2.19,
+          "pe": null
+        },
+        {
+          "revGrowth": null,
+          "opm": 27.0,
+          "tax": 23.0,
+          "other_income": 2.0,
+          "interest": 8.0,
+          "depreciation": 24.0,
+          "shares": 2.19,
+          "pe": null
+        },
+        {
+          "revGrowth": null,
+          "opm": 27.0,
+          "tax": 23.0,
+          "other_income": 2.0,
+          "interest": 8.0,
+          "depreciation": 24.0,
+          "shares": 2.19,
+          "pe": null
+        }
+      ],
+      "assumptions": ""
+    }
   }
 }
