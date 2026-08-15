@@ -281,9 +281,26 @@ def _github_synced_load(cache_key, sha_key, github_path, local_loader, local_sav
     return data
 
 
-def _github_synced_save(data, cache_key, sha_key, github_path, local_saver, label):
+def _github_synced_save(data, cache_key, sha_key, github_path, local_saver, label, max_attempts=4):
     """Shared save pattern: local write always succeeds first (never lose
-    data), then best-effort push to GitHub with a single stale-sha retry."""
+    data), then best-effort push to GitHub — retried with a freshly
+    fetched sha up to max_attempts times, not just once.
+
+    Why more than one retry: Streamlit fires one script rerun per widget
+    commit, and typing through several driver fields in a row (growth%,
+    OPM%, tax%, PE, ...) can genuinely produce reruns close enough
+    together that more than one save is in flight against the same sha
+    — observed live (2026-08-16): a single retry still hit a second 409.
+    Each loop iteration re-fetches the current sha immediately before
+    retrying, so it keeps re-aiming at whatever the latest remote state
+    actually is rather than replaying the same stale guess.
+
+    Not data-lossy on this device even if every attempt fails: every
+    save writes the FULL current dict (see set_case_state()), so the
+    very next successful save — for this field or any other — carries
+    this one's change forward too. The real residual risk is narrower:
+    a redeploy, or another device reading GitHub, in the gap before
+    that next successful save."""
     local_saver(data)
     st.session_state[cache_key] = data
 
@@ -291,22 +308,23 @@ def _github_synced_save(data, cache_key, sha_key, github_path, local_saver, labe
     if not cfg:
         return
     message = f"Update {os.path.basename(github_path)} via Valuation Ledger app"
-    try:
-        sha = st.session_state.get(sha_key)
-        new_sha = github_put_json(cfg, github_path, data, sha, message)
-        st.session_state[sha_key] = new_sha
-    except Exception as e:
-        # Most common cause: stale sha because another device saved since
-        # our last load. Re-fetch once to pick up the latest sha and
-        # retry a single time; if that also fails, give up for this save
-        # (local copy is already safe) rather than looping.
+    sha = st.session_state.get(sha_key)
+    last_err = None
+    for attempt in range(max_attempts):
         try:
-            _, fresh_sha = github_fetch_json(cfg, github_path)
-            new_sha = github_put_json(cfg, github_path, data, fresh_sha, message)
+            new_sha = github_put_json(cfg, github_path, data, sha, message)
             st.session_state[sha_key] = new_sha
-        except Exception as e2:
-            st.warning(f"⚠️ Saved locally, but GitHub sync of {label} failed ({e2}). "
-                       "This device's copy is safe; other devices may be stale until sync recovers.")
+            return
+        except Exception as e:
+            last_err = e
+            try:
+                _, sha = github_fetch_json(cfg, github_path)
+            except Exception:
+                break  # can't even read now (network down) — no point retrying further
+
+    st.warning(f"⚠️ Saved locally, but GitHub sync of {label} failed after {max_attempts} attempts "
+               f"({last_err}). This device's copy is safe; the next successful save will carry this "
+               "change forward too — but until then, a redeploy or another device reading GitHub may miss it.")
 
 
 def load_scenarios():
