@@ -1,0 +1,14 @@
+# Never commit the real secrets file
+.streamlit/secrets.toml
+
+# Local data cache — personal to whoever runs the app
+cache/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS
+.DS_Store
