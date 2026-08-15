@@ -1,7 +1,8 @@
 {
   "quarters": [
     "Q1 FY26",
-    "Quarter 2"
+    "Quarter 2",
+    "Quarter 3"
   ],
   "tracked": [
     "VENUSREM"
@@ -11,6 +12,10 @@
       "Q1 FY26": {
         "note": "Superb Operating Leverage Playing out",
         "tag": "Beat"
+      },
+      "Quarter 2": {
+        "note": "",
+        "tag": ""
       }
     }
   }
