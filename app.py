@@ -512,8 +512,19 @@ def inject_css():
                   font-weight: 700; padding: 3px 9px; border-radius: 20px; margin-left: 8px; vertical-align: middle; }
       .vl-badge-guidance { color: var(--vl-brass) !important; background: rgba(224,179,77,0.14); }
 
-      /* Slim icon buttons (the summary row's Open/Remove) */
+      /* Slim icon buttons (the summary row's Remove) */
       div[data-testid="stHorizontalBlock"] button[kind="secondary"] { padding: 2px 10px; }
+
+      /* Summary row's company name — a tertiary st.button styled to read
+         as a link (opens that company's Detail page) rather than a button,
+         replacing the old standalone 🔍 icon column. */
+      div[data-testid="stHorizontalBlock"] button[kind="tertiary"] {
+        padding: 0; font-weight: 700; font-size: 14.5px; color: var(--vl-ink) !important;
+      }
+      div[data-testid="stHorizontalBlock"] button[kind="tertiary"]:hover { color: var(--vl-accent) !important; }
+      div[data-testid="stHorizontalBlock"] button[kind="tertiary"] p { text-decoration: underline;
+        text-decoration-color: transparent; transition: text-decoration-color 0.15s; }
+      div[data-testid="stHorizontalBlock"] button[kind="tertiary"]:hover p { text-decoration-color: currentColor; }
 
       /* Financial Modelling table's per-cell number_input widgets — made
          to look like inline table cells rather than standalone form
@@ -659,18 +670,25 @@ def page_summary(all_stocks, scenarios):
 
     # GRID_CASES (module-level, excludes "mgmt") drives these columns too
     # — see its definition for why.
-    col_widths = [2.2, 0.8, 0.6, 1.05, 1.05, 1.05, 0.75, 0.55]
-    header_labels = ["Company", "Price", "P/E"] + [CASE_LABEL[c].replace(" Case", "") for c in GRID_CASES] + ["", ""]
+    col_widths = [2.2, 0.8, 0.6, 1.05, 1.05, 1.05, 0.55]
+    header_labels = ["Company", "Price", "P/E"] + [CASE_LABEL[c].replace(" Case", "") for c in GRID_CASES] + [""]
     header = st.columns(col_widths)
     for col, label in zip(header, header_labels):
         col.markdown(f"**{label}**")
     st.markdown('<hr style="margin:2px 0 8px;border-color:var(--vl-border);">', unsafe_allow_html=True)
 
     n_case_cols = len(GRID_CASES)
-    open_col, remove_col = 3 + n_case_cols, 4 + n_case_cols
+    remove_col = 3 + n_case_cols
     for ticker, stock in all_stocks.items():
         cols = st.columns(col_widths)
-        cols[0].markdown(f"**{stock['name']}**  \n<span class='vl-sub'>{ticker}</span>", unsafe_allow_html=True)
+        # Name itself opens the Detail page (replaces the old standalone 🔍
+        # icon column, 2026-08-15) — styled via the tertiary-button CSS
+        # above to read as a link, not a button.
+        if cols[0].button(stock["name"], key=f"open_{ticker}", type="tertiary", help=f"Open {stock['name']}"):
+            st.session_state["_jump_to"] = ticker
+            st.rerun()
+        cols[0].markdown(f"<span class='vl-sub' style='display:block;margin-top:-10px;'>{ticker}</span>",
+                          unsafe_allow_html=True)
         cols[1].write(f"₹{fmt(stock.get('current_price'))}")
         cols[2].write(f"{fmt(stock.get('pe_ratio'), 1)}x")
         for i, case in enumerate(GRID_CASES):
@@ -683,9 +701,6 @@ def page_summary(all_stocks, scenarios):
             sub = (f"{fmt(h['growth'], 1)}% gr · {fmt(h['pe'], 1)}x PE<br>"
                    f"₹{fmt(h['share_price'])} · FY{h['year']}") if h and h["cagr"] is not None else "fill PE"
             cols[3 + i].markdown(cagr_html(h["cagr"] if h else None, sub), unsafe_allow_html=True)
-        if cols[open_col].button("🔍", key=f"open_{ticker}", help=f"Open {stock['name']}", use_container_width=True):
-            st.session_state["_jump_to"] = ticker
-            st.rerun()
         if cols[remove_col].button("🗑️", key=f"remove_{ticker}", help=f"Remove {stock['name']} from tracking", use_container_width=True):
             raw = load_raw_all_stocks()
             raw.pop(ticker, None)
