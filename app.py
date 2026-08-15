@@ -556,6 +556,16 @@ def inject_css():
         border-right: 1px solid var(--vl-border);
         padding-right: 6px;
       }
+
+      /* Row labels (Revenue Growth %, Interest Expense Cr, Number of
+       * Shares Cr, ...) at default body font size wrap to 2 lines in
+       * that narrow first column on real-world (non-maximized) window
+       * widths, breaking the "each metric is one row" layout this grid
+       * is built around — shrink + force single line so column width
+       * math never has to guess the exact pixel budget. */
+      .st-key-vl_projections_grid div[data-testid="stHorizontalBlock"] > div:first-child p {
+        font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
     </style>
     """, unsafe_allow_html=True)
 
