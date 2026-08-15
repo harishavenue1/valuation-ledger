@@ -1,0 +1,39 @@
+{
+  "TITAN": {
+    "base": {
+      "drivers": [
+        {
+          "revGrowth": 25.0,
+          "opm": 10.0,
+          "tax": 25.0,
+          "other_income": 450.0,
+          "interest": 1180.0,
+          "depreciation": 826.0,
+          "shares": 88.782,
+          "pe": null
+        },
+        {
+          "revGrowth": null,
+          "opm": 10.0,
+          "tax": 25.0,
+          "other_income": 450.0,
+          "interest": 1180.0,
+          "depreciation": 826.0,
+          "shares": 88.782,
+          "pe": null
+        },
+        {
+          "revGrowth": null,
+          "opm": 10.0,
+          "tax": 25.0,
+          "other_income": 450.0,
+          "interest": 1180.0,
+          "depreciation": 826.0,
+          "shares": 88.782,
+          "pe": null
+        }
+      ],
+      "assumptions": ""
+    }
+  }
+}
