@@ -1,7 +1,11 @@
 {
-  "quarters": [],
+  "quarters": [
+    "Quarter 1"
+  ],
   "tracked": [
     "VENUSREM"
   ],
-  "cells": {}
+  "cells": {
+    "VENUSREM": {}
+  }
 }
