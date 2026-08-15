@@ -22,18 +22,26 @@ Run locally:
     streamlit run app.py
 """
 import json, os, re
+from datetime import date
 
 import streamlit as st
 
 from screener_fetch import fetch_one
 
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
+GUIDANCE_DIR = os.path.join(CACHE_DIR, "guidance")
+SCENARIOS_PATH = os.path.join(CACHE_DIR, "scenarios.json")
 ALL_STOCKS_PATH = os.path.join(CACHE_DIR, "all_stocks.json")
 
 FY_LABEL_RE = re.compile(r"^(Mar|Jun|Sep|Dec)\s+\d{4}$")
 ARRAY_FIELDS = ["revenue", "revenue_growth_pct", "expenses", "operating_profit", "opm_pct",
                 "other_income", "interest", "depreciation", "pbt", "tax_pct", "net_profit",
                 "pat_growth_pct", "eps", "shares_cr"]
+
+CASES = ["base", "bull", "bear", "mgmt"]
+CASE_LABEL = {"base": "Base Case", "bull": "Bull Case", "bear": "Bear Case", "mgmt": "Management Case"}
+CASE_COLOR = {"base": "#B7C0BB", "bull": "#63C46E", "bear": "#E3776A", "mgmt": "#C4A8E8"}
+N_EST_YEARS = 3
 
 st.set_page_config(page_title="Valuation Ledger", page_icon="🧮", layout="wide")
 
@@ -93,12 +101,289 @@ def save_all_stocks(data):
         json.dump(data, f, indent=2)
 
 
+def load_guidance(ticker):
+    p = os.path.join(GUIDANCE_DIR, f"{ticker}.json")
+    if os.path.exists(p):
+        with open(p) as f:
+            return json.load(f)
+    return None
+
+
+def _local_load_scenarios():
+    if not os.path.exists(SCENARIOS_PATH):
+        return {}
+    with open(SCENARIOS_PATH) as f:
+        return json.load(f)
+
+
+def _local_save_scenarios(data):
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    with open(SCENARIOS_PATH, "w") as f:
+        json.dump(data, f, indent=2)
+
+
+# ── GitHub-backed sync (so scenario edits survive a cloud redeploy and
+# are the same regardless of which computer opens the app) ──
+#
+# cache/ is git-ignored (personal, regenerable-ish local cache) so it
+# does NOT survive a Streamlit Community Cloud redeploy on its own. To
+# make scenario edits durable and consistent across devices, they're
+# also mirrored to a real tracked file (GITHUB_DATA_PATH, default
+# "data/scenarios.json") in this repo via the GitHub Contents API,
+# authenticated with a Personal Access Token in st.secrets. The local
+# file stays as a fast read + offline-safe fallback: every save writes
+# both; every load prefers GitHub when configured, and falls back to
+# local (with a one-time warning) if the API call fails for any reason
+# (no token configured, bad token, network hiccup, rate limit).
+#
+# Cached in st.session_state for the lifetime of the browser session so
+# a Streamlit rerun (fires on every widget interaction) doesn't refetch
+# from the API each time — only load_scenarios()'s first call per
+# session hits the network; every save updates the cache + the stored
+# sha (GitHub requires the current blob sha to update a file).
+
+import base64
+import requests
+
+
+def get_github_config():
+    """None if GITHUB_TOKEN isn't set — callers fall back to local-only."""
+    try:
+        token = st.secrets["GITHUB_TOKEN"]
+    except (KeyError, FileNotFoundError):
+        return None
+    repo = st.secrets.get("GITHUB_REPO", "harishavenue1/valuation-ledger")
+    path = st.secrets.get("GITHUB_DATA_PATH", "data/scenarios.json")
+    return {"token": token, "repo": repo, "path": path}
+
+
+def _github_headers(token):
+    return {"Authorization": f"token {token}", "Accept": "application/vnd.github+json"}
+
+
+def github_fetch_scenarios(cfg):
+    """Returns (data, sha). sha is None both when the file doesn't exist
+    yet (first-ever save will create it) and when the fetch failed
+    outright — callers distinguish those via the raised/caught error
+    happening at the call site, not here."""
+    url = f"https://api.github.com/repos/{cfg['repo']}/contents/{cfg['path']}"
+    resp = requests.get(url, headers=_github_headers(cfg["token"]), timeout=10)
+    if resp.status_code == 404:
+        return {}, None
+    resp.raise_for_status()
+    body = resp.json()
+    content = base64.b64decode(body["content"]).decode("utf-8")
+    return json.loads(content), body["sha"]
+
+
+def github_put_scenarios(cfg, data, sha):
+    """Returns the new sha. Raises on failure — caller decides how to
+    surface that (local save already succeeded by the time this runs,
+    so a failure here never loses data, just skips the cross-device
+    sync for this edit)."""
+    url = f"https://api.github.com/repos/{cfg['repo']}/contents/{cfg['path']}"
+    payload = {
+        "message": "Update scenarios.json via Valuation Ledger app",
+        "content": base64.b64encode(json.dumps(data, indent=2).encode("utf-8")).decode("ascii"),
+    }
+    if sha:
+        payload["sha"] = sha
+    resp = requests.put(url, headers=_github_headers(cfg["token"]), json=payload, timeout=10)
+    resp.raise_for_status()
+    return resp.json()["content"]["sha"]
+
+
+def load_scenarios():
+    if "scenarios_cache" in st.session_state:
+        return st.session_state["scenarios_cache"]
+
+    cfg = get_github_config()
+    if cfg:
+        try:
+            data, sha = github_fetch_scenarios(cfg)
+            st.session_state["scenarios_sha"] = sha
+            st.session_state["scenarios_cache"] = data
+            _local_save_scenarios(data)  # keep local mirror fresh as offline fallback
+            return data
+        except Exception as e:
+            st.warning(f"⚠️ Couldn't reach GitHub for scenario sync ({e}) — using local cache. "
+                       "Edits will still save locally but won't sync until the next successful load.")
+
+    data = _local_load_scenarios()
+    st.session_state["scenarios_cache"] = data
+    st.session_state["scenarios_sha"] = None
+    return data
+
+
+def save_scenarios(data):
+    _local_save_scenarios(data)  # always succeeds first — this is the never-lose-data path
+    st.session_state["scenarios_cache"] = data
+
+    cfg = get_github_config()
+    if not cfg:
+        return
+    try:
+        sha = st.session_state.get("scenarios_sha")
+        new_sha = github_put_scenarios(cfg, data, sha)
+        st.session_state["scenarios_sha"] = new_sha
+    except Exception as e:
+        # Most common cause: stale sha because another device saved since
+        # our last load. Re-fetch once to pick up the latest sha and
+        # retry a single time; if that also fails, give up for this save
+        # (local copy is already safe) rather than looping.
+        try:
+            _, fresh_sha = github_fetch_scenarios(cfg)
+            new_sha = github_put_scenarios(cfg, data, fresh_sha)
+            st.session_state["scenarios_sha"] = new_sha
+        except Exception as e2:
+            st.warning(f"⚠️ Saved locally, but GitHub sync failed ({e2}). "
+                       "This device's copy is safe; other devices may be stale until sync recovers.")
+
+
+def last_actual(arr):
+    """Walk backward for the first non-null value — defensive against a
+    company whose latest FY had a one-off null (e.g. a loss year with no
+    meaningful tax %)."""
+    for v in reversed(arr or []):
+        if v is not None:
+            return v
+    return None
+
+
+def default_case_state(stock, ticker, case):
+    """Revenue Growth % seeds from cache/guidance/<TICKER>.json when
+    present (Base=range midpoint, Bull=upper, Bear=lower — never for
+    Management Case, which stays open for the user's own "if management
+    is right" modelling). OPM%/Tax% always carry forward the last actual
+    value regardless of guidance — computeModel() needs both non-null
+    before it can produce PBT/PAT/EPS at all."""
+    guidance = load_guidance(ticker)
+    guided_growth = None
+    if guidance and case != "mgmt":
+        guided_growth = guidance.get("revenue_growth", {}).get(case)
+    drivers = []
+    for _ in range(N_EST_YEARS):
+        drivers.append({
+            "revGrowth": guided_growth,
+            "opm": last_actual(stock.get("opm_pct")),
+            "tax": last_actual(stock.get("tax_pct")),
+            "other_income": last_actual(stock.get("other_income")),
+            "interest": last_actual(stock.get("interest")),
+            "depreciation": last_actual(stock.get("depreciation")),
+            "shares": last_actual(stock.get("shares_cr")),
+            "pe": None,
+        })
+    assumptions = ""
+    if guided_growth is not None and guidance and guidance.get("source_text"):
+        which = ("guidance range midpoint" if case == "base"
+                 else "guidance range upper end" if case == "bull" else "guidance range lower end")
+        assumptions = (
+            f"[Auto-filled from management guidance research]\n\n"
+            f"Revenue Growth % ({CASE_LABEL[case]}): {guided_growth}% — {which}.\n\n"
+            f"Guidance: {guidance['source_text']}\n\n"
+            f"Confidence: {guidance.get('confidence', '')}\n\n"
+            f"Sources: {', '.join(guidance.get('source_urls', []))}\n\n"
+            f"As of: {guidance.get('as_of', '')}"
+        )
+    return {"drivers": drivers, "assumptions": assumptions}
+
+
+def get_case_state(scenarios, stock, ticker, case):
+    saved = scenarios.get(ticker, {}).get(case)
+    if saved and "drivers" in saved:
+        return saved
+    return default_case_state(stock, ticker, case)
+
+
+def set_case_state(scenarios, ticker, case, state):
+    scenarios.setdefault(ticker, {})[case] = state
+    save_scenarios(scenarios)
+
+
+# ───────────────────────── Compute engine ─────────────────────────
+# Mirrors the Artifact's computeModel()/headlineCagr() exactly — same
+# formulas, same sequencing. Keep in sync if either changes.
+
+def compute_model(stock, state):
+    revenue_prev = stock["revenue"][-1]
+    pat_prev = stock["net_profit"][-1]
+    rows = []
+    for dr in state["drivers"]:
+        revenue = (revenue_prev * (1 + dr["revGrowth"] / 100)
+                   if dr.get("revGrowth") is not None and revenue_prev is not None else None)
+        op = revenue * dr["opm"] / 100 if revenue is not None and dr.get("opm") is not None else None
+        expenses = revenue - op if revenue is not None and op is not None else None
+        oi = dr.get("other_income") or 0
+        interest = dr.get("interest") or 0
+        dep = dr.get("depreciation") or 0
+        pbt = (op + oi - interest - dep) if op is not None else None
+        pat = pbt * (1 - dr["tax"] / 100) if pbt is not None and dr.get("tax") is not None else None
+        pat_growth = ((pat - pat_prev) / abs(pat_prev) * 100
+                      if pat is not None and pat_prev not in (None, 0) else None)
+        shares = dr.get("shares") or stock["shares_cr"][-1]
+        eps = pat / shares if pat is not None and shares else None
+        fwd_pe = (stock["current_price"] / eps
+                  if eps not in (None, 0) and stock.get("current_price") else None)
+        rows.append(dict(revenue=revenue, operating_profit=op, expenses=expenses, other_income=oi,
+                          interest=interest, depreciation=dep, pbt=pbt, pat=pat, pat_growth=pat_growth,
+                          shares=shares, eps=eps, forward_pe=fwd_pe))
+        revenue_prev = revenue if revenue is not None else revenue_prev
+        pat_prev = pat if pat is not None else pat_prev
+    return rows
+
+
+def days_until(year):
+    return (date(year, 3, 31) - date.today()).days
+
+
+def cagr_for(current_price, share_price, days):
+    if not current_price or not share_price or share_price <= 0 or days is None or days <= 0:
+        return None
+    return (pow(share_price / current_price, 365 / days) - 1) * 100
+
+
+def headline_cagr(stock, state):
+    """The chip/summary-column CAGR — nearest estimate year that has a PE
+    Multiple filled in (walk forward, not backward: a user modelling only
+    FY2027 expects the Base Case chip to show FY2027, not silently skip
+    ahead to FY2029 just because it happens to be checked first)."""
+    model = compute_model(stock, state)
+    last_year = int(stock["years"][-1].split(" ")[1])
+    for i in range(N_EST_YEARS):
+        dr = state["drivers"][i]
+        eps = model[i]["eps"]
+        if dr.get("pe") and eps is not None:
+            year = last_year + i + 1
+            share_price = eps * dr["pe"]
+            cagr = cagr_for(stock["current_price"], share_price, days_until(year))
+            return dict(cagr=cagr, share_price=share_price, year=year)
+    return None
+
+
 # ───────────────────────── Format helpers ─────────────────────────
+
+def as_float(x):
+    """st.number_input requires value/step/min/max to all share one numeric
+    type — mixing an int (e.g. a guidance JSON's plain `35`) with a float
+    step (e.g. 0.5) raises StreamlitMixedNumericTypesError."""
+    return float(x) if x is not None else None
+
 
 def fmt(v, digits=0, suffix=""):
     if v is None:
         return "—"
     return f"{v:,.{digits}f}{suffix}"
+
+
+def fmt_signed(v, digits=1, suffix="%"):
+    if v is None:
+        return "—"
+    return f"{'+' if v >= 0 else ''}{v:,.{digits}f}{suffix}"
+
+
+def est_year_label(stock, i, fy=False):
+    last_year = int(stock["years"][-1].split(" ")[1])
+    return f"FY{last_year + i + 1}" if fy else f"Mar {last_year + i + 1}"
 
 
 # ───────────────────────── Theme ─────────────────────────
@@ -135,8 +420,53 @@ def inject_css():
                         color: var(--vl-faint) !important; margin-bottom: 3px; }
       .vl-stat-value { font-size: 19px; font-weight: 700; color: var(--vl-ink) !important; }
 
+      .vl-chip-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px;
+                     margin: 6px 0 18px; }
+      .vl-chip { background: var(--vl-surface); border: 1px solid var(--vl-border);
+                 border-left: 4px solid var(--chip-color, var(--vl-accent)); border-radius: 10px;
+                 padding: 12px 16px; }
+      .vl-chip-label { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em;
+                        color: var(--vl-faint) !important; margin-bottom: 3px; }
+      .vl-chip-cagr { font-size: 22px; font-weight: 700; color: var(--chip-color, var(--vl-accent)) !important; }
+      .vl-chip-sub { display: block; font-size: 12px; color: var(--vl-muted) !important; margin-top: 2px; }
+
+      .vl-badge { display: inline-block; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em;
+                  font-weight: 700; padding: 3px 9px; border-radius: 20px; margin-left: 8px; vertical-align: middle; }
+      .vl-badge-guidance { color: var(--vl-brass) !important; background: rgba(224,179,77,0.14); }
+
       /* Slim icon buttons (the summary row's Open/Remove) */
       div[data-testid="stHorizontalBlock"] button[kind="secondary"] { padding: 2px 10px; }
+
+      /* Financial Modelling table's per-cell number_input widgets — made
+         to look like inline table cells rather than standalone form
+         fields. Critical-input rows (Revenue Growth %/OPM %/Tax %) get a
+         brass underline via :has() + the widget's own aria-label. */
+      div[data-testid="stNumberInput"] { margin-bottom: 0 !important; }
+      div[data-testid="stNumberInput"] input {
+        background: transparent !important; border: none !important;
+        border-bottom: 1px dashed var(--vl-faint) !important; border-radius: 0 !important;
+        color: var(--vl-ink) !important; font-size: 13px !important;
+        text-align: right !important; padding: 2px 4px !important; height: 30px !important;
+      }
+      div[data-testid="stNumberInput"] button { display: none !important; }
+      div[data-testid="stNumberInput"]:has(input[aria-label="Revenue Growth %"]) input,
+      div[data-testid="stNumberInput"]:has(input[aria-label="OPM %"]) input,
+      div[data-testid="stNumberInput"]:has(input[aria-label="Tax %"]) input {
+        border-bottom: 1.5px solid var(--vl-brass) !important;
+        background: rgba(224,179,77,0.10) !important; font-weight: 600 !important;
+      }
+
+      /* Future Projections grid — one vertical rule after each FY's 3
+       * case columns (Base/Bull/Bear), so the 9-column Year×Case grid
+       * reads as 3 visually separated FY groups instead of one
+       * undifferentiated block. Scoped to this grid's own st.container
+       * key (not global) so it can't bleed into the summary table or
+       * the fundamentals table, which use unrelated column counts. */
+      .st-key-vl_projections_grid div[data-testid="stHorizontalBlock"] > div:nth-child(4),
+      .st-key-vl_projections_grid div[data-testid="stHorizontalBlock"] > div:nth-child(7) {
+        border-right: 1px solid var(--vl-border);
+        padding-right: 6px;
+      }
     </style>
     """, unsafe_allow_html=True)
 
@@ -145,6 +475,23 @@ def render_stat_row(items):
     cards = "".join(f'<div class="vl-stat"><span class="vl-stat-label">{lab}</span>'
                      f'<span class="vl-stat-value">{val}</span></div>' for lab, val in items)
     st.markdown(f'<div class="vl-stat-row">{cards}</div>', unsafe_allow_html=True)
+
+
+def render_chip_row(chips):
+    """chips: list of (label, color, cagr_text, sub_text) tuples."""
+    cards = "".join(
+        f'<div class="vl-chip" style="--chip-color:{color}"><span class="vl-chip-label">{label} CAGR</span>'
+        f'<span class="vl-chip-cagr">{cagr_text}</span><span class="vl-chip-sub">{sub_text}</span></div>'
+        for label, color, cagr_text, sub_text in chips
+    )
+    st.markdown(f'<div class="vl-chip-row">{cards}</div>', unsafe_allow_html=True)
+
+
+def cagr_html(cagr, sub):
+    if cagr is None:
+        return '<span class="vl-sub">—</span>'
+    cls = "vl-pos" if cagr >= 0 else "vl-neg"
+    return f'<span class="{cls}">{fmt_signed(cagr, 1)}</span><br><span class="vl-sub">{sub}</span>'
 
 
 def hist_cell_html(v, digits, suffix, colorize, bold):
@@ -159,7 +506,7 @@ def hist_cell_html(v, digits, suffix, colorize, bold):
 
 # ───────────────────────── Summary page ─────────────────────────
 
-def page_summary(all_stocks):
+def page_summary(all_stocks, scenarios):
     if not all_stocks:
         st.markdown('<div class="vl-empty">No companies yet — retrieve one from Screener.in below.</div>',
                     unsafe_allow_html=True)
@@ -181,22 +528,27 @@ def page_summary(all_stocks):
         st.success(f"Refreshed {len(tickers)} companies.")
         st.rerun()
 
-    header = st.columns([3, 1, 1, 1.2, 1.2, 0.6, 0.5])
-    for col, label in zip(header, ["Company", "Price", "P/E", "Mkt Cap", "52W High", "", ""]):
+    col_widths = [2.2, 0.8, 0.6, 1.05, 1.05, 1.05, 1.05, 0.75, 0.55]
+    header_labels = ["Company", "Price", "P/E", "Base", "Bull", "Bear", "Mgmt", "", ""]
+    header = st.columns(col_widths)
+    for col, label in zip(header, header_labels):
         col.markdown(f"**{label}**")
     st.markdown('<hr style="margin:2px 0 8px;border-color:var(--vl-border);">', unsafe_allow_html=True)
 
     for ticker, stock in all_stocks.items():
-        cols = st.columns([3, 1, 1, 1.2, 1.2, 0.6, 0.5])
+        cols = st.columns(col_widths)
         cols[0].markdown(f"**{stock['name']}**  \n<span class='vl-sub'>{ticker}</span>", unsafe_allow_html=True)
         cols[1].write(f"₹{fmt(stock.get('current_price'))}")
         cols[2].write(f"{fmt(stock.get('pe_ratio'), 1)}x")
-        cols[3].write(f"₹{fmt(stock.get('market_cap_cr'))} Cr")
-        cols[4].write(f"₹{fmt(stock.get('week52_high'))}")
-        if cols[5].button("Open", key=f"open_{ticker}"):
+        for i, case in enumerate(CASES):
+            state = get_case_state(scenarios, stock, ticker, case)
+            h = headline_cagr(stock, state)
+            sub = f"₹{fmt(h['share_price'])} · FY{h['year']}" if h and h["cagr"] is not None else "fill PE"
+            cols[3 + i].markdown(cagr_html(h["cagr"] if h else None, sub), unsafe_allow_html=True)
+        if cols[7].button("🔍", key=f"open_{ticker}", help=f"Open {stock['name']}", use_container_width=True):
             st.session_state["_jump_to"] = ticker
             st.rerun()
-        if cols[6].button("🗑️", key=f"remove_{ticker}", help=f"Remove {stock['name']} from tracking"):
+        if cols[8].button("🗑️", key=f"remove_{ticker}", help=f"Remove {stock['name']} from tracking", use_container_width=True):
             raw = load_raw_all_stocks()
             raw.pop(ticker, None)
             save_all_stocks(raw)
@@ -205,7 +557,7 @@ def page_summary(all_stocks):
 
 # ───────────────────────── Detail page (fundamentals) ─────────────────────────
 
-def page_detail(stock, ticker):
+def page_detail(stock, ticker, scenarios):
     if st.button("← Back to Summary"):
         st.session_state["_jump_to"] = None
         st.rerun()
@@ -231,38 +583,222 @@ def page_detail(stock, ticker):
             st.success("Refreshed.")
             st.rerun()
 
+    chips = []
+    for case in CASES:
+        state = get_case_state(scenarios, stock, ticker, case)
+        h = headline_cagr(stock, state)
+        color = CASE_COLOR[case]
+        if h and h["cagr"] is not None:
+            chips.append((CASE_LABEL[case], color, fmt_signed(h["cagr"], 1), f"₹{fmt(h['share_price'])} · FY{h['year']}"))
+        else:
+            chips.append((CASE_LABEL[case], color, "—", "fill PE to compute"))
+    render_chip_row(chips)
+
     st.divider()
     st.caption("Fundamentals (Screener.in, consolidated) — annual Profit & Loss")
 
     n = len(stock["years"])
-    col_widths = [2.2] + [1] * n
+    hist_col_widths = [2.2] + [1] * n
 
-    def row(label, vals, digits=0, suffix="", colorize=False, bold=False):
-        cols = st.columns(col_widths)
+    def hist_row(label, vals, digits=0, suffix="", colorize=False, bold=False):
+        cols = st.columns(hist_col_widths)
         cols[0].markdown(("**" + label + "**") if bold else label)
         for j, v in enumerate(vals):
             cols[1 + j].markdown(hist_cell_html(v, digits, suffix, colorize, bold), unsafe_allow_html=True)
 
-    hdr = st.columns(col_widths)
+    hdr = st.columns(hist_col_widths)
     hdr[0].markdown("**Financial Year**")
     for j, y in enumerate(stock["years"]):
         hdr[1 + j].markdown(f"<div style='text-align:right;color:var(--vl-faint);font-size:11px;'>{y}</div>",
                              unsafe_allow_html=True)
 
-    row("Revenue Cr", stock["revenue"], bold=True)
-    row("Revenue Growth %", stock["revenue_growth_pct"], 1, "%", colorize=True)
-    row("Expenses Cr", stock["expenses"])
-    row("Operating Profit Cr", stock["operating_profit"], bold=True)
-    row("OPM %", stock["opm_pct"], 1, "%", colorize=True)
-    row("Other Income Cr", stock["other_income"])
-    row("Interest Expense Cr", stock["interest"])
-    row("Depreciation Cr", stock["depreciation"])
-    row("PBT Cr", stock["pbt"], bold=True)
-    row("Tax %", stock["tax_pct"], 1, "%")
-    row("PAT Cr", stock["net_profit"], bold=True)
-    row("PAT Growth %", stock["pat_growth_pct"], 1, "%", colorize=True)
-    row("Number of Shares Cr", stock["shares_cr"], 3)
-    row("EPS ₹", stock["eps"], 2, bold=True)
+    hist_row("Revenue Cr", stock["revenue"], bold=True)
+    hist_row("Revenue Growth %", stock["revenue_growth_pct"], 1, "%", colorize=True)
+    hist_row("Expenses Cr", stock["expenses"])
+    hist_row("Operating Profit Cr", stock["operating_profit"], bold=True)
+    hist_row("OPM %", stock["opm_pct"], 1, "%", colorize=True)
+    hist_row("Other Income Cr", stock["other_income"])
+    hist_row("Interest Expense Cr", stock["interest"])
+    hist_row("Depreciation Cr", stock["depreciation"])
+    hist_row("PBT Cr", stock["pbt"], bold=True)
+    hist_row("Tax %", stock["tax_pct"], 1, "%")
+    hist_row("PAT Cr", stock["net_profit"], bold=True)
+    hist_row("PAT Growth %", stock["pat_growth_pct"], 1, "%", colorize=True)
+    hist_row("Number of Shares Cr", stock["shares_cr"], 3)
+    hist_row("EPS ₹", stock["eps"], 2, bold=True)
+
+    st.divider()
+    render_projections_grid(stock, ticker, scenarios)
+
+
+def render_projections_grid(stock, ticker, scenarios):
+    """Base/Bull/Bear/Management × all 3 estimate years flattened into one
+    grid — explicit correction, 2026-08-15: an earlier version repeated a
+    full 4-case header + ~11 rows per year (3 separate blocks), which
+    meant scrolling past a lot of vertical space that the page's width
+    wasn't using ("input boxes are very wide enough" — plenty of spare
+    horizontal room). One metric per row, with all Year×Case combinations
+    as columns in that same row, uses the width instead of the scroll."""
+    st.subheader("🎯 Future Projections & CAGR — all cases, all years, one grid")
+
+    # Management Case is dropped from this grid specifically (explicit
+    # request, 2026-08-15) — it's never guidance-seeded anyway and stayed
+    # blank/unused here most of the time. It's still fully available via
+    # the Base/Bull/Bear/Mgmt chip row above and the Summary page; this
+    # just stops giving it grid columns and a Key Assumptions box. Any
+    # Mgmt scenario data already saved elsewhere is left untouched — the
+    # persist loop below only writes back drivers for the cases actually
+    # rendered here.
+    GRID_CASES = [c for c in CASES if c != "mgmt"]
+
+    guidance = load_guidance(ticker)
+    if guidance:
+        st.info(f"📋 **Guidance-seeded** — Base/Bull/Bear Revenue Growth % pre-filled from management guidance "
+                f"research where available (as of {guidance.get('as_of', 'unknown')}). Edit any case freely.",
+                icon="📋")
+
+    case_states = {c: get_case_state(scenarios, stock, ticker, c) for c in GRID_CASES}
+
+    EDITABLE_FIELDS = ["revGrowth", "opm", "tax", "other_income", "interest", "depreciation", "shares"]
+    FIELD_STEP = {"revGrowth": 0.5, "opm": 0.5, "tax": 0.5, "other_income": 1.0,
+                  "interest": 1.0, "depreciation": 1.0, "shares": 0.01}
+    FIELD_DIGITS = {"revGrowth": 1, "opm": 1, "tax": 1, "other_income": 1,
+                     "interest": 1, "depreciation": 1, "shares": 3}
+    FIELD_LABEL = {"revGrowth": "Revenue Growth %", "opm": "OPM %", "tax": "Tax %",
+                   "other_income": "Other Income Cr", "interest": "Interest Expense Cr",
+                   "depreciation": "Depreciation Cr", "shares": "Number of Shares Cr"}
+
+    def widget_key(case, field, i):
+        return f"{ticker}_{case}_{field}_{i}"
+
+    # Two-pass, same trick as before but across all rendered cases: Pass
+    # 1 reads every case's current widget values straight out of
+    # session_state (a case's "Revenue Cr" needs that case's own Revenue
+    # Growth %, whose input widget renders in the same grid) and
+    # computes each case's full 3-year model up front. Pass 2 renders.
+    effective = {}
+    for case in GRID_CASES:
+        state = case_states[case]
+        eff_list = []
+        for i in range(N_EST_YEARS):
+            dr = state["drivers"][i]
+            eff = {f: st.session_state.get(widget_key(case, f, i), as_float(dr[f])) for f in EDITABLE_FIELDS}
+            eff["pe"] = st.session_state.get(f"{ticker}_{case}_pe_{i}", as_float(dr["pe"]))
+            eff_list.append(eff)
+        effective[case] = eff_list
+    models = {case: compute_model(stock, {"drivers": effective[case]}) for case in GRID_CASES}
+
+    last_year = int(stock["years"][-1].split(" ")[1])
+    n_cases = len(GRID_CASES)
+    grid_widths = [1.5] + [0.95] * (N_EST_YEARS * n_cases)
+
+    def col_index(i, c):
+        return 1 + i * n_cases + c
+
+    def header_row():
+        cols = st.columns(grid_widths)
+        cols[0].markdown("&nbsp;", unsafe_allow_html=True)
+        for i in range(N_EST_YEARS):
+            year = last_year + i + 1
+            for c, case in enumerate(GRID_CASES):
+                cols[col_index(i, c)].markdown(
+                    f"<div style='text-align:center;font-size:10px;line-height:1.3;'>"
+                    f"<b>FY{year}</b><br><span style='color:{CASE_COLOR[case]};font-weight:700;'>"
+                    f"{CASE_LABEL[case].replace(' Case', '')}</span></div>", unsafe_allow_html=True)
+
+    def input_row(label, field):
+        cols = st.columns(grid_widths)
+        cols[0].markdown(label)
+        for i in range(N_EST_YEARS):
+            for c, case in enumerate(GRID_CASES):
+                with cols[col_index(i, c)]:
+                    st.number_input(FIELD_LABEL[field], value=effective[case][i][field],
+                                     step=FIELD_STEP[field], format=f"%.{FIELD_DIGITS[field]}f",
+                                     key=widget_key(case, field, i), label_visibility="collapsed")
+
+    def computed_row(label, field, digits=0, suffix=""):
+        cols = st.columns(grid_widths)
+        cols[0].markdown(f"*{label}*")
+        for i in range(N_EST_YEARS):
+            for c, case in enumerate(GRID_CASES):
+                v = models[case][i][field]
+                cols[col_index(i, c)].markdown(
+                    f"<div style='text-align:center;color:var(--vl-muted);font-style:italic;font-size:12px;'>"
+                    f"{fmt(v, digits, suffix)}</div>", unsafe_allow_html=True)
+
+    # Keyed container so the FY-separator CSS rule (nth-child on this
+    # grid's own st.columns() rows) can't bleed into any other table on
+    # the page — see inject_css()'s .st-key-vl_projections_grid rule.
+    with st.container(key="vl_projections_grid"):
+        header_row()
+        input_row("Revenue Growth %", "revGrowth")
+        input_row("OPM %", "opm")
+        input_row("Tax %", "tax")
+        input_row("Other Income Cr", "other_income")
+        input_row("Interest Expense Cr", "interest")
+        input_row("Depreciation Cr", "depreciation")
+        input_row("Number of Shares Cr", "shares")
+        computed_row("Revenue Cr", "revenue")
+        computed_row("PAT Cr", "pat")
+        computed_row("EPS ₹", "eps", 2)
+
+        pe_cols = st.columns(grid_widths)
+        pe_cols[0].markdown("**PE Multiple**")
+        for i in range(N_EST_YEARS):
+            for c, case in enumerate(GRID_CASES):
+                with pe_cols[col_index(i, c)]:
+                    st.number_input("PE Multiple", value=as_float(case_states[case]["drivers"][i].get("pe")),
+                                     step=0.5, format="%.1f", key=f"{ticker}_{case}_pe_{i}",
+                                     label_visibility="collapsed", placeholder="PE")
+
+        cagr_cols = st.columns(grid_widths)
+        cagr_cols[0].markdown("**CAGR**")
+        for i in range(N_EST_YEARS):
+            year = last_year + i + 1
+            for c, case in enumerate(GRID_CASES):
+                eps = models[case][i]["eps"]
+                pe_val = st.session_state.get(f"{ticker}_{case}_pe_{i}")
+                share_price = eps * pe_val if eps is not None and pe_val else None
+                cagr = cagr_for(stock["current_price"], share_price, days_until(year))
+                sub = f"₹{fmt(share_price)}" if share_price is not None else ""
+                with cagr_cols[col_index(i, c)]:
+                    st.markdown(f"<div style='text-align:center;font-size:11px;'>{cagr_html(cagr, sub)}</div>",
+                                unsafe_allow_html=True)
+
+    st.markdown('<div style="font-size:11px;color:var(--vl-faint);margin-top:6px;">'
+                'plain = editable estimate (carried forward by default) · <i>italic</i> = auto-computed</div>',
+                unsafe_allow_html=True)
+
+    # ── Persist any edits across the cases rendered here (Mgmt's saved
+    # state, if any, is untouched — it has no widgets in this grid) ──
+    for case in GRID_CASES:
+        state = case_states[case]
+        new_drivers = []
+        for i in range(N_EST_YEARS):
+            nd = {f: st.session_state.get(widget_key(case, f, i)) for f in EDITABLE_FIELDS}
+            nd["pe"] = st.session_state.get(f"{ticker}_{case}_pe_{i}")
+            new_drivers.append(nd)
+        if new_drivers != state["drivers"]:
+            state["drivers"] = new_drivers
+            set_case_state(scenarios, ticker, case, state)
+
+    # ── Key assumptions — one narrow text area per case ──
+    st.divider()
+    st.caption("Key Assumptions")
+    assum_cols = st.columns(len(GRID_CASES))
+    for c, case in enumerate(GRID_CASES):
+        with assum_cols[c]:
+            st.markdown(f"<span style='color:{CASE_COLOR[case]};font-weight:600;font-size:12.5px;'>"
+                        f"{CASE_LABEL[case]}</span>", unsafe_allow_html=True)
+            val = st.text_area(f"{case} assumptions", value=case_states[case]["assumptions"], height=110,
+                                key=f"{ticker}_{case}_assumptions", label_visibility="collapsed", max_chars=5000)
+            if val != case_states[case]["assumptions"]:
+                case_states[case]["assumptions"] = val
+                set_case_state(scenarios, ticker, case, case_states[case])
+            if st.button("Clear estimates", key=f"{ticker}_{case}_clear", use_container_width=True):
+                scenarios.get(ticker, {}).pop(case, None)
+                save_scenarios(scenarios)
+                st.rerun()
 
 
 # ───────────────────────── Retrieve ─────────────────────────
@@ -316,14 +852,15 @@ def main():
     st.title("🧮 Valuation Ledger")
 
     all_stocks = load_all_stocks()
+    scenarios = load_scenarios()
     jump_to = st.session_state.get("_jump_to")
 
     if jump_to and jump_to in all_stocks:
-        page_detail(all_stocks[jump_to], jump_to)
+        page_detail(all_stocks[jump_to], jump_to, scenarios)
         return
 
     st.caption("Summary — retrieve companies live from Screener.in")
-    page_summary(all_stocks)
+    page_summary(all_stocks, scenarios)
     section_retrieve(all_stocks)
 
 

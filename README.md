@@ -20,11 +20,13 @@ streamlit run app.py
 3. In the app's **Settings → Secrets**, add:
    ```toml
    SCREENER_SESSION_ID = "your-cookie-value"
+   GITHUB_TOKEN = "your-fine-grained-pat"
    ```
-4. Deploy. The retrieve form is disabled until the secret is set.
+4. Deploy. The retrieve form is disabled until `SCREENER_SESSION_ID` is set.
 
 ## Notes
 
 - Session cookies expire periodically — when retrieval starts failing, get a fresh `sessionid` and update it (locally: edit `.streamlit/secrets.toml`; deployed: update the Cloud dashboard's Secrets panel).
-- `cache/` (your retrieved company data) is git-ignored — personal to each deployment, not meant to be shared via the repo.
+- `cache/` (your retrieved company data + scenario edits) is git-ignored — personal to each machine's disk, and does **not** survive a Streamlit Community Cloud redeploy on its own.
+- **Scenario edits (Base/Bull/Bear/Mgmt inputs) are synced to `data/scenarios.json`, a real tracked file in this repo**, via the GitHub Contents API, whenever `GITHUB_TOKEN` is set in secrets (see `.streamlit/secrets.toml.example` for how to generate one). This is what makes edits survive redeploys and stay consistent across devices — without it, edits only live in the local `cache/` file on whichever machine is running the app. Retrieved-company data (`cache/all_stocks.json`) is *not* synced this way since it's one click to re-fetch via "🔄 Refresh all now".
 - `screener_fetch.py` holds all the Screener.in scraping logic — no other file needed to make a fetch.
