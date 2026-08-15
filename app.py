@@ -430,7 +430,11 @@ def headline_cagr(stock, state):
             year = last_year + i + 1
             share_price = eps * dr["pe"]
             cagr = cagr_for(stock["current_price"], share_price, days_until(year))
-            return dict(cagr=cagr, share_price=share_price, year=year)
+            # growth is never None here: eps only computes (above) when
+            # revGrowth was set, since revenue — and everything downstream
+            # of it, including eps — depends on it in compute_model().
+            return dict(cagr=cagr, share_price=share_price, year=year,
+                        growth=dr.get("revGrowth"), pe=dr["pe"])
     return None
 
 
@@ -672,7 +676,12 @@ def page_summary(all_stocks, scenarios):
         for i, case in enumerate(GRID_CASES):
             state = get_case_state(scenarios, stock, ticker, case)
             h = headline_cagr(stock, state)
-            sub = f"₹{fmt(h['share_price'])} · FY{h['year']}" if h and h["cagr"] is not None else "fill PE"
+            # Growth% and PE are the two assumptions that actually drove
+            # this CAGR (added on request, 2026-08-15) — shown above the
+            # price/year line so it's legible at a glance which case grew
+            # revenue how fast at what exit multiple, not just the result.
+            sub = (f"{fmt(h['growth'], 1)}% gr · {fmt(h['pe'], 1)}x PE<br>"
+                   f"₹{fmt(h['share_price'])} · FY{h['year']}") if h and h["cagr"] is not None else "fill PE"
             cols[3 + i].markdown(cagr_html(h["cagr"] if h else None, sub), unsafe_allow_html=True)
         if cols[open_col].button("🔍", key=f"open_{ticker}", help=f"Open {stock['name']}", use_container_width=True):
             st.session_state["_jump_to"] = ticker
