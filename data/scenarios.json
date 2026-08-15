@@ -152,7 +152,7 @@
           "interest": 8.0,
           "depreciation": 24.0,
           "shares": 2.19,
-          "pe": null
+          "pe": 40.0
         },
         {
           "revGrowth": null,
@@ -187,7 +187,7 @@
           "interest": 8.0,
           "depreciation": 24.0,
           "shares": 2.19,
-          "pe": null
+          "pe": 20.0
         },
         {
           "revGrowth": null,
