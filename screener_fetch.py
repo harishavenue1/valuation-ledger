@@ -138,17 +138,26 @@ def fetch_one(ticker, session_id):
 
     top = parse_top_ratios(soup)
     pl_years, pl_rows = parse_pl_section(soup)
-    if not pl_years and consolidated:
-        # /consolidated/ can return HTTP 200 with a structurally empty
-        # P&L table (blank header, no year columns) for companies that
-        # only publish standalone figures — retry standalone explicitly.
+    MIN_USEFUL_YEARS = 5  # below this, multi-year trend/CAGR work is too thin to be useful
+    if consolidated and len(pl_years or []) < MIN_USEFUL_YEARS:
+        # /consolidated/ can return HTTP 200 with either a structurally
+        # empty P&L table (blank header, no year columns — companies
+        # that only publish standalone figures) or a short-but-nonempty
+        # one (e.g. consolidation only recently started/became required,
+        # so consolidated history is truncated even though the company
+        # itself is old and standalone goes back much further — real
+        # case: Yash Highvoltage, incorporated 2002, consolidated P&L
+        # only from Mar 2025 while standalone has Mar 2020 onward).
+        # Either way, more years of standalone beats fewer years of
+        # consolidated for trend work, so prefer it whenever it's longer.
         r = requests.get(f"https://www.screener.in{base_url}/", headers=headers, timeout=15)
         if r.status_code == 200:
-            html = r.text
-            consolidated = False
-            soup = BeautifulSoup(html, "html.parser")
-            top = parse_top_ratios(soup)
-            pl_years, pl_rows = parse_pl_section(soup)
+            standalone_soup = BeautifulSoup(r.text, "html.parser")
+            standalone_years, standalone_rows = parse_pl_section(standalone_soup)
+            if len(standalone_years or []) > len(pl_years or []):
+                html, consolidated, soup = r.text, False, standalone_soup
+                top = parse_top_ratios(soup)
+                pl_years, pl_rows = standalone_years, standalone_rows
     if not pl_years:
         return None, "Profit & Loss section not found on this page (tried both consolidated and standalone)"
 

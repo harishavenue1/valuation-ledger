@@ -724,7 +724,13 @@ def page_detail(stock, ticker, scenarios):
     render_chip_row(chips)
 
     st.divider()
-    st.caption("Fundamentals (Screener.in, consolidated) — annual Profit & Loss")
+    # Reflects the actual per-stock fetch result, not assumed consolidated
+    # — screener_fetch.py falls back to standalone whenever consolidated
+    # has too few years (e.g. a company whose consolidated reporting only
+    # started recently despite decades of standalone history), so this
+    # varies stock to stock and the label needs to say which it got.
+    basis = "consolidated" if stock.get("consolidated") else "standalone"
+    st.caption(f"Fundamentals (Screener.in, {basis}) — annual Profit & Loss")
 
     n = len(stock["years"])
     hist_col_widths = [2.2] + [1] * n
