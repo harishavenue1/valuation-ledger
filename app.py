@@ -40,6 +40,9 @@ GUIDANCE_DIR = os.path.join(CACHE_DIR, "guidance")
 SCENARIOS_PATH = os.path.join(CACHE_DIR, "scenarios.json")
 ALL_STOCKS_PATH = os.path.join(CACHE_DIR, "all_stocks.json")
 LAST_REFRESH_PATH = os.path.join(CACHE_DIR, "last_refresh.json")
+GUIDANCE_TRACKER_PATH = os.path.join(CACHE_DIR, "guidance_tracker.json")
+GUIDANCE_TAGS = ["", "Beat", "Neutral", "Miss"]
+GUIDANCE_TAG_CLASS = {"Beat": "vl-tag-beat", "Neutral": "vl-tag-neutral", "Miss": "vl-tag-miss"}
 
 FY_LABEL_RE = re.compile(r"^(Mar|Jun|Sep|Dec)\s+\d{4}$")
 ARRAY_FIELDS = ["revenue", "revenue_growth_pct", "expenses", "operating_profit", "opm_pct",
@@ -256,6 +259,7 @@ def get_github_config():
         "repo": repo,
         "scenarios_path": st.secrets.get("GITHUB_DATA_PATH", "data/scenarios.json"),
         "stocks_path": st.secrets.get("GITHUB_STOCKS_PATH", "data/all_stocks.json"),
+        "guidance_tracker_path": st.secrets.get("GITHUB_GUIDANCE_TRACKER_PATH", "data/guidance_tracker.json"),
     }
 
 
@@ -376,6 +380,42 @@ def save_scenarios(data):
     cfg = get_github_config()
     path = cfg["scenarios_path"] if cfg else "data/scenarios.json"
     _github_synced_save(data, "scenarios_cache", "scenarios_sha", path, _local_save_scenarios, "scenarios")
+
+
+def _local_load_guidance_tracker():
+    if not os.path.exists(GUIDANCE_TRACKER_PATH):
+        return {"quarters": [], "tracked": [], "cells": {}}
+    with open(GUIDANCE_TRACKER_PATH) as f:
+        return json.load(f)
+
+
+def _local_save_guidance_tracker(data):
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    with open(GUIDANCE_TRACKER_PATH, "w") as f:
+        json.dump(data, f, indent=2)
+
+
+def load_guidance_tracker():
+    """{"quarters": [labels...], "tracked": [tickers...], "cells": {ticker:
+    {quarter_label: {"note": str, "tag": ""|"Beat"|"Neutral"|"Miss"}}}}.
+    "tracked" is this page's OWN row list — deliberately separate from
+    all_stocks.json's full company set (explicit request, 2026-08-16:
+    "in this page we can row wise add more companies", read as this
+    page having its own add/remove independent of the Summary page's
+    list) — though adding a company here still fetches into the shared
+    all_stocks.json via the same fetch_one()/save_all_stocks() path, so
+    price data isn't duplicated, only tracked-here membership is."""
+    cfg = get_github_config()
+    path = cfg["guidance_tracker_path"] if cfg else "data/guidance_tracker.json"
+    return _github_synced_load("guidance_tracker_cache", "guidance_tracker_sha", path,
+                                _local_load_guidance_tracker, _local_save_guidance_tracker, "guidance tracker")
+
+
+def save_guidance_tracker(data):
+    cfg = get_github_config()
+    path = cfg["guidance_tracker_path"] if cfg else "data/guidance_tracker.json"
+    _github_synced_save(data, "guidance_tracker_cache", "guidance_tracker_sha", path,
+                         _local_save_guidance_tracker, "guidance tracker")
 
 
 def last_actual(arr):
@@ -576,6 +616,37 @@ def inject_css():
                   font-weight: 700; padding: 3px 9px; border-radius: 20px; margin-left: 8px; vertical-align: middle; }
       .vl-badge-guidance { color: var(--vl-brass) !important; background: rgba(224,179,77,0.14); }
 
+      /* Management Guidance Tracker page — small Beat/Neutral/Miss pill
+       * rendered under each quarter's tag selectbox (same .vl-badge
+       * shape as vl-badge-guidance above, not a widget-wrapper hack —
+       * simpler and matches how CAGR +/- is already color-coded via
+       * plain markdown spans elsewhere, e.g. cagr_html()). */
+      .vl-tag-beat { color: var(--vl-good) !important; background: rgba(99,196,110,0.14); }
+      .vl-tag-miss { color: var(--vl-bad) !important; background: rgba(227,119,106,0.14); }
+      .vl-tag-neutral { color: var(--vl-brass) !important; background: rgba(224,179,77,0.14); }
+
+      /* Guidance Tracker's Company x Quarter x [+] grid — fixed pixel
+       * widths + horizontal scroll instead of the normal shrink-to-fit
+       * st.columns() behavior, so quarter columns stay comfortably
+       * writable/readable no matter how many accumulate (2026-08-16
+       * request). :first-child / :last-child are structural, not a
+       * fixed count, so this works regardless of how many quarters
+       * exist — column order is always [Company (with its own remove
+       * button inside), q1..qN, ➕] with nothing after ➕ (Price/Remove
+       * both dropped from being separate trailing columns, same
+       * request), so ➕ can keep appending columns rightward forever.
+       * Every st.columns() row inside this one container shares the
+       * same scroll position since none of them have their own overflow
+       * context — only the outer container does. */
+      .st-key-vl_guidance_grid { overflow-x: auto; padding-bottom: 10px; }
+      .st-key-vl_guidance_grid div[data-testid="stHorizontalBlock"] { flex-wrap: nowrap; min-width: max-content; }
+      .st-key-vl_guidance_grid div[data-testid="stHorizontalBlock"] > div:first-child {
+        flex: 0 0 auto !important; width: 200px !important; min-width: 200px !important; }
+      .st-key-vl_guidance_grid div[data-testid="stHorizontalBlock"] > div:last-child {
+        flex: 0 0 auto !important; width: 55px !important; min-width: 55px !important; }
+      .st-key-vl_guidance_grid div[data-testid="stHorizontalBlock"] > div:not(:first-child):not(:last-child) {
+        flex: 0 0 auto !important; width: 260px !important; min-width: 260px !important; }
+
       /* Slim icon buttons (the summary row's Remove) */
       div[data-testid="stHorizontalBlock"] button[kind="secondary"] { padding: 2px 10px; }
 
@@ -657,6 +728,29 @@ def cagr_html(cagr, sub):
     return f'<span class="{cls}">{fmt_signed(cagr, 1)}</span><br><span class="vl-sub">{sub}</span>'
 
 
+def ema_yn_html(price, ema_value):
+    """Y = price currently above that EMA (bullish), N = at/below, plus
+    the signed % gap between price and that EMA underneath (added
+    2026-08-16, request: "easy to track ones closer to ema") — small
+    magnitude either direction means price is sitting right on the EMA
+    (support/resistance zone, or an imminent crossover), which the Y/N
+    letter alone can't distinguish from one that's decisively cleared
+    it. The sign always agrees with Y/N by construction (Y ⟺ positive),
+    so this isn't contradictory information, just the magnitude Y/N
+    alone throws away. "—" when either input is missing (e.g. a company
+    added before this existed and not yet refreshed, or the EMA fetch
+    failed for that company on last refresh — see fetch_one()'s
+    degrade-to-None handling in screener_fetch.py)."""
+    if price is None or ema_value is None or ema_value == 0:
+        return '<div style="text-align:center;"><span class="vl-sub">—</span></div>'
+    is_above = price > ema_value
+    cls = "vl-pos" if is_above else "vl-neg"
+    label = "Y" if is_above else "N"
+    pct = (price - ema_value) / ema_value * 100
+    return (f'<div style="text-align:center;"><span class="{cls}" style="font-weight:700;">{label}</span>'
+            f'<br><span class="{cls}" style="font-size:11px;">{fmt_signed(pct)}</span></div>')
+
+
 def hist_cell_html(v, digits, suffix, colorize, bold):
     text = fmt(v, digits, suffix)
     cls = ""
@@ -727,6 +821,10 @@ def maybe_auto_refresh():
 
 
 def page_summary(all_stocks, scenarios):
+    if st.button("📋 Management Guidance Tracker →", help="Track quarterly management guidance and Beat/Neutral/Miss per company"):
+        st.session_state["_view"] = "guidance_tracker"
+        st.rerun()
+
     if not all_stocks:
         st.markdown('<div class="vl-empty">No companies yet — retrieve one from Screener.in below.</div>',
                     unsafe_allow_html=True)
@@ -737,17 +835,25 @@ def page_summary(all_stocks, scenarios):
         st.success(f"Refreshed {n} companies.")
         st.rerun()
 
-    # GRID_CASES (module-level, excludes "mgmt") drives these columns too
-    # — see its definition for why.
-    col_widths = [2.2, 0.8, 0.6, 1.05, 1.05, 1.05, 0.55]
-    header_labels = ["Company", "Price", "P/E"] + [CASE_LABEL[c].replace(" Case", "") for c in GRID_CASES] + [""]
+    # GRID_CASES (module-level, excludes "mgmt") drives the case columns —
+    # see its definition for why. EMA_COLS: Y = price currently above that
+    # EMA, N = at/below (see ema_yn_html()) — Close-based via Screener's
+    # own chart API, not OHLC4 (explicit trade-off, 2026-08-16, over a
+    # second data source like yfinance that has no coverage for SME/
+    # small-cap names this app otherwise supports).
+    EMA_COLS = [("ema20d", "20D"), ("ema50d", "50D"), ("ema33w", "33W")]
+    col_widths = [2.2, 0.8, 0.6] + [0.5] * len(EMA_COLS) + [1.05, 1.05, 1.05, 0.55]
+    header_labels = (["Company", "Price", "P/E"] + [lbl for _, lbl in EMA_COLS]
+                      + [CASE_LABEL[c].replace(" Case", "") for c in GRID_CASES] + [""])
     header = st.columns(col_widths)
     for col, label in zip(header, header_labels):
         col.markdown(f"**{label}**")
     st.markdown('<hr style="margin:2px 0 8px;border-color:var(--vl-border);">', unsafe_allow_html=True)
 
+    n_ema_cols = len(EMA_COLS)
+    case_start = 3 + n_ema_cols
     n_case_cols = len(GRID_CASES)
-    remove_col = 3 + n_case_cols
+    remove_col = case_start + n_case_cols
     for ticker, stock in all_stocks.items():
         cols = st.columns(col_widths)
         # Name itself opens the Detail page (replaces the old standalone 🔍
@@ -760,6 +866,9 @@ def page_summary(all_stocks, scenarios):
                           unsafe_allow_html=True)
         cols[1].write(f"₹{fmt(stock.get('current_price'))}")
         cols[2].write(f"{fmt(stock.get('pe_ratio'), 1)}x")
+        for i, (ema_key, _) in enumerate(EMA_COLS):
+            cols[3 + i].markdown(ema_yn_html(stock.get("current_price"), stock.get(ema_key)),
+                                  unsafe_allow_html=True)
         for i, case in enumerate(GRID_CASES):
             state = get_case_state(scenarios, stock, ticker, case)
             h = headline_cagr(stock, state)
@@ -769,12 +878,181 @@ def page_summary(all_stocks, scenarios):
             # revenue how fast at what exit multiple, not just the result.
             sub = (f"{fmt(h['growth'], 1)}% gr · {fmt(h['pe'], 1)}x PE<br>"
                    f"₹{fmt(h['share_price'])} · FY{h['year']}") if h and h["cagr"] is not None else "fill PE"
-            cols[3 + i].markdown(cagr_html(h["cagr"] if h else None, sub), unsafe_allow_html=True)
+            cols[case_start + i].markdown(cagr_html(h["cagr"] if h else None, sub), unsafe_allow_html=True)
         if cols[remove_col].button("🗑️", key=f"remove_{ticker}", help=f"Remove {stock['name']} from tracking", use_container_width=True):
             raw = load_raw_all_stocks()
             raw.pop(ticker, None)
             save_all_stocks(raw)
             st.rerun()
+
+
+# ───────────────────────── Management Guidance Tracker page ─────────────────────────
+
+def page_guidance_tracker(all_stocks):
+    """Company (static, left, with its own remove button) x Quarter
+    (grows sideways via the ➕ column at the end, middle/right) grid —
+    track what management guided each quarter, free-text notes plus a
+    Beat/Neutral/Miss tag, added 2026-08-16 per explicit request. No
+    Price column here (dropped on request, 2026-08-16 — already on the
+    Summary page, redundant here, and kept ➕ from being anything but the
+    literal last column so it can keep appending indefinitely). Quarter
+    columns and this page's own tracked-company list are both
+    user-controlled (add/remove/rename), not automatic — see
+    load_guidance_tracker()'s docstring for why "tracked" here is
+    deliberately separate from all_stocks.json's full company set even
+    though adding a company here still fetches into that same shared
+    store (no duplicated price data, only tracked-here membership)."""
+    if st.button("← Back to Summary", key="gt_back"):
+        st.session_state["_view"] = "summary"
+        st.rerun()
+
+    st.subheader("📋 Management Guidance Tracker")
+    st.caption("Company (left) × Quarter (grows rightward — ➕ at the end adds another).")
+
+    tracker = load_guidance_tracker()
+    quarters = tracker.setdefault("quarters", [])
+    tracked = tracker.setdefault("tracked", [])
+    cells = tracker.setdefault("cells", {})
+
+    # ── Add a company (fetches into the shared all_stocks.json, same as
+    # Retrieve on Summary — only this page's "tracked" membership is new) ──
+    with st.form("gt_add_company", clear_on_submit=True):
+        c1, c2 = st.columns([4, 1])
+        with c1:
+            new_ticker = st.text_input("Add a company to this tracker",
+                                        placeholder="e.g. TITAN, or a numeric BSE code for SME names").strip()
+        with c2:
+            st.write("")
+            add_co_submitted = st.form_submit_button("Add", type="primary", use_container_width=True)
+    if add_co_submitted and new_ticker:
+        with st.spinner(f"Fetching {new_ticker} from Screener.in…"):
+            data, err = fetch_one(new_ticker.upper(), get_session_id())
+        if err:
+            st.error(f"Couldn't fetch **{new_ticker}**: {err}")
+        else:
+            raw = load_raw_all_stocks()
+            raw[data["ticker"]] = data
+            save_all_stocks(raw)
+            if data["ticker"] not in tracked:
+                tracked.append(data["ticker"])
+                save_guidance_tracker(tracker)
+            st.success(f"Added **{data['name']}** ({data['ticker']}).")
+            st.rerun()
+    elif add_co_submitted:
+        st.warning("Type a ticker or company name first.")
+
+    if not tracked:
+        st.markdown('<div class="vl-empty">No companies tracked here yet — add one above.</div>',
+                    unsafe_allow_html=True)
+        return
+
+    st.divider()
+
+    # Fixed pixel widths + horizontal scroll (explicit request, 2026-08-16:
+    # "set the width to each quarter to at least sizeable to write and
+    # read easily") instead of Streamlit's normal st.columns() behavior,
+    # which proportionally SHRINKS every column to fit the container —
+    # fine for a handful of columns, unusable once enough quarters pile
+    # up. Scoped to this one container (.st-key-vl_guidance_grid, see
+    # inject_css()) so it can't affect the Summary table or the
+    # Fundamentals/Projections grids on the Detail page, which all still
+    # want the normal shrink-to-fit behavior. Structural :first-child /
+    # :nth-last-child selectors (not nth-child(N) counting from the
+    # start) so the CSS doesn't need to know how many quarter columns
+    # exist — Company stays wide-fixed on the left, Price/Remove stay
+    # narrow-fixed on the right, and every quarter in between gets the
+    # same comfortable fixed width regardless of count. The relative
+    # ratios still passed to st.columns() below are moot once this CSS's
+    # `flex: 0 0 auto` overrides them — kept only because st.columns()
+    # requires *some* ratio list matching the column count.
+    with st.container(key="vl_guidance_grid"):
+        # ➕ is the LAST column, full stop (explicit request, 2026-08-16:
+        # "we dont need price col at end... let + button be end of the
+        # col, so it can keep appending the cols") — Price dropped from
+        # this grid entirely (already on the Summary page, redundant
+        # here), and the per-row remove button moved into the Company
+        # cell itself so nothing trails after ➕ either. New quarters
+        # just keep extending the row rightward with ➕ always at the tip.
+        col_widths = [2.0] + [1.4] * len(quarters) + [0.5]
+        add_q_col = 1 + len(quarters)  # == last index
+
+        # ── Header row ── (remove button stacked under the label, not a
+        # nested st.columns(), so the fixed-width CSS above — which
+        # targets every stHorizontalBlock inside this container — has no
+        # nested row to accidentally also force wide)
+        header = st.columns(col_widths)
+        header[0].markdown("**Company**")
+        for i, q in enumerate(quarters):
+            with header[1 + i]:
+                # Keyed by the quarter's own label, not its index — an
+                # index-based key would collide with stale session_state
+                # left over from whatever quarter used to sit at that
+                # position before an earlier removal shifted the list,
+                # showing/renaming the wrong quarter's label.
+                new_label = st.text_input("Quarter label", value=q, key=f"gt_qlabel_{q}",
+                                           label_visibility="collapsed")
+                if new_label != q and new_label.strip() and new_label not in quarters:
+                    quarters[i] = new_label.strip()
+                    cells_for_q = {t: cells[t].pop(q) for t in cells if q in cells[t]}
+                    for t, cell in cells_for_q.items():
+                        cells[t][new_label.strip()] = cell
+                    save_guidance_tracker(tracker)
+                    st.rerun()
+                if st.button("✕ remove", key=f"gt_rmq_{q}", help=f"Remove the \"{q}\" column (all companies)"):
+                    quarters.remove(q)
+                    for t in cells:
+                        cells[t].pop(q, None)
+                    save_guidance_tracker(tracker)
+                    st.rerun()
+        with header[add_q_col]:
+            st.write("")
+            if st.button("➕", key="gt_add_quarter_btn", help="Add a new quarter column"):
+                n = len(quarters) + 1
+                label = f"Quarter {n}"
+                while label in quarters:
+                    n += 1
+                    label = f"Quarter {n}"
+                quarters.append(label)
+                save_guidance_tracker(tracker)
+                st.rerun()
+        st.markdown('<hr style="margin:2px 0 8px;border-color:var(--vl-border);">', unsafe_allow_html=True)
+
+        # ── One row per tracked company ──
+        for ticker in list(tracked):
+            stock = all_stocks.get(ticker)
+            row_cells = cells.setdefault(ticker, {})
+            cols = st.columns(col_widths)
+            with cols[0]:
+                st.markdown(
+                    f"**{stock['name'] if stock else ticker}**  \n<span class='vl-sub'>{ticker}</span>",
+                    unsafe_allow_html=True)
+                if st.button("🗑️ remove", key=f"gt_rm_{ticker}", help=f"Remove {ticker} from this tracker only "
+                             "(doesn't touch the main company list)"):
+                    tracked.remove(ticker)
+                    save_guidance_tracker(tracker)
+                    st.rerun()
+
+            for i, q in enumerate(quarters):
+                cell = row_cells.setdefault(q, {"note": "", "tag": ""})
+                with cols[1 + i]:
+                    tag = st.selectbox("Tag", GUIDANCE_TAGS,
+                                        index=GUIDANCE_TAGS.index(cell["tag"]) if cell["tag"] in GUIDANCE_TAGS else 0,
+                                        key=f"gt_{ticker}_{q}_tag", label_visibility="collapsed")
+                    # Always render the badge line, hidden (not omitted)
+                    # when there's no tag yet — reserves the same height
+                    # either way, so every row's note box starts at the
+                    # same y position regardless of which cells happen to
+                    # have a tag set (misalignment reported 2026-08-16:
+                    # tagged cells' notes sat lower than untagged ones').
+                    badge_html = (f"<span class='vl-badge {GUIDANCE_TAG_CLASS[tag]}'>{tag}</span>" if tag
+                                  else "<span class='vl-badge' style='visibility:hidden;'>—</span>")
+                    st.markdown(badge_html, unsafe_allow_html=True)
+                    note = st.text_area("Note", value=cell["note"], key=f"gt_{ticker}_{q}_note",
+                                         label_visibility="collapsed", height=90,
+                                         placeholder="Guidance / commentary…")
+                    if tag != cell["tag"] or note != cell["note"]:
+                        row_cells[q] = {"note": note, "tag": tag}
+                        save_guidance_tracker(tracker)
 
 
 # ───────────────────────── Detail page (fundamentals) ─────────────────────────
@@ -1075,6 +1353,10 @@ def main():
 
     if jump_to and jump_to in all_stocks:
         page_detail(all_stocks[jump_to], jump_to, scenarios)
+        return
+
+    if st.session_state.get("_view") == "guidance_tracker":
+        page_guidance_tracker(all_stocks)
         return
 
     st.caption("Summary — retrieve companies live from Screener.in")

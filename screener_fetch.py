@@ -32,6 +32,77 @@ def parse_number(s):
         return None
 
 
+def fetch_price_series(company_id, headers, days):
+    """Daily-close (date, price) pairs from Screener's own internal chart
+    API — not a public/documented endpoint, found by inspecting the
+    company page's own chart widget (data-company-id + a
+    /api/company/<id>/chart/?q=Price&days=N request), but it's the only
+    source that has price history for EVERY ticker this app supports,
+    including SME/small-caps (verified: yfinance has zero coverage for
+    Yash Highvoltage/544310, ruled out for that reason 2026-08-16).
+    Trade-off accepted along with that choice: this only returns daily
+    Close, not Open/High/Low, so EMAs computed from it are Close-based,
+    not the OHLC4 convention used elsewhere in this user's tools.
+
+    Screener silently changes granularity based on `days` — empirically
+    daily up to ~400-ish, auto-downsampled to ~weekly (7-day gaps) once
+    you ask for a long enough range. See DAILY_DAYS_FOR_EMA /
+    WEEKLY_DAYS_FOR_EMA below for the specific values this app relies on
+    to get each granularity — if Screener ever changes that threshold,
+    the daily fetch silently becoming weekly (or vice versa) would skew
+    every EMA quietly, so re-verify the gap pattern here if EMA values
+    ever look implausible."""
+    r = requests.get(f"https://www.screener.in/api/company/{company_id}/chart/",
+                      params={"q": "Price", "days": days}, headers=headers, timeout=15)
+    if r.status_code != 200:
+        return []
+    try:
+        raw_values = r.json()["datasets"][0]["values"]
+    except (KeyError, IndexError, ValueError, TypeError):
+        return []
+    out = []
+    for d, v in raw_values:
+        p = parse_number(v)
+        if p is not None:
+            out.append((d, p))
+    return out
+
+
+def ema(values, period):
+    """Standard EMA (seeded with the SMA of the first `period` values,
+    then iterated forward), computed over whatever history is actually
+    available even when that's less than `period` points — common for
+    recently-listed stocks. Converges less precisely with thin history,
+    but a rougher estimate beats refusing to show anything. Returns the
+    EMA as of the LAST point in `values` (i.e. "today"), or None if
+    `values` is empty."""
+    if not values:
+        return None
+    n = min(period, len(values))
+    e = sum(values[:n]) / n
+    alpha = 2 / (period + 1)
+    for v in values[n:]:
+        e = v * alpha + e * (1 - alpha)
+    return e
+
+
+DAILY_DAYS_FOR_EMA = 400    # confirmed daily granularity (~271 trading-day points)
+WEEKLY_DAYS_FOR_EMA = 3000  # confirmed weekly granularity (auto-downsampled by Screener)
+
+
+def fetch_price_emas(company_id, headers):
+    """20-day / 50-day EMA from daily closes, 33-week EMA from weekly
+    closes — see fetch_price_series()'s docstring for the Close-only /
+    SME-coverage trade-off this relies on."""
+    daily_closes = [p for _, p in fetch_price_series(company_id, headers, DAILY_DAYS_FOR_EMA)]
+    weekly_closes = [p for _, p in fetch_price_series(company_id, headers, WEEKLY_DAYS_FOR_EMA)]
+    return {
+        "ema20d": ema(daily_closes, 20),
+        "ema50d": ema(daily_closes, 50),
+        "ema33w": ema(weekly_closes, 33),
+    }
+
+
 def resolve_url(ticker, headers):
     r = requests.get("https://www.screener.in/api/company/search/",
                       params={"q": ticker}, headers=headers, timeout=15)
@@ -207,6 +278,15 @@ def fetch_one(ticker, session_id=None):
 
     canonical_ticker = base_url.rstrip("/").split("/")[-1]
 
+    # EMAs are a best-effort add-on, not core to what this function has
+    # always returned (price/P&L) — a hiccup fetching/parsing them
+    # (network blip, Screener's chart API shape changing) degrades to
+    # None fields rather than failing the whole company fetch.
+    try:
+        emas = fetch_price_emas(company_id, headers)
+    except Exception:
+        emas = {"ema20d": None, "ema50d": None, "ema33w": None}
+
     return {
         "ticker": canonical_ticker,
         "name": company_name,
@@ -216,6 +296,9 @@ def fetch_one(ticker, session_id=None):
         "pe_ratio": top["pe_ratio"],
         "market_cap_cr": top["market_cap_cr"],
         "week52_high": top["week52_high"],
+        "ema20d": emas["ema20d"],
+        "ema50d": emas["ema50d"],
+        "ema33w": emas["ema33w"],
         "years": pl_years,
         "revenue": revenue,
         "revenue_growth_pct": yoy_series(revenue),
