@@ -212,5 +212,42 @@
       ],
       "assumptions": ""
     }
+  },
+  "KPL": {
+    "base": {
+      "drivers": [
+        {
+          "revGrowth": 30.0,
+          "opm": 24.0,
+          "tax": 25.0,
+          "other_income": 2.0,
+          "interest": 11.0,
+          "depreciation": 20.0,
+          "shares": 1.032,
+          "pe": null
+        },
+        {
+          "revGrowth": null,
+          "opm": 24.0,
+          "tax": 25.0,
+          "other_income": 2.0,
+          "interest": 11.0,
+          "depreciation": 20.0,
+          "shares": 1.032,
+          "pe": null
+        },
+        {
+          "revGrowth": null,
+          "opm": 24.0,
+          "tax": 25.0,
+          "other_income": 2.0,
+          "interest": 11.0,
+          "depreciation": 20.0,
+          "shares": 1.032,
+          "pe": null
+        }
+      ],
+      "assumptions": ""
+    }
   }
 }
