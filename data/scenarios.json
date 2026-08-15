@@ -401,7 +401,7 @@
           "interest": 0.0,
           "depreciation": 26.0,
           "shares": 1.339,
-          "pe": null
+          "pe": 20.0
         },
         {
           "revGrowth": null,
