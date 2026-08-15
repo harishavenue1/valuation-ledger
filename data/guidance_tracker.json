@@ -1,13 +1,13 @@
 {
   "quarters": [
-    "Quarter 1"
+    "Q1 FY26"
   ],
   "tracked": [
     "VENUSREM"
   ],
   "cells": {
     "VENUSREM": {
-      "Quarter 1": {
+      "Q1 FY26": {
         "note": "",
         "tag": "Beat"
       }
