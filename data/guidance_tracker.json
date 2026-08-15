@@ -2,7 +2,8 @@
   "quarters": [
     "Q1 FY26",
     "Quarter 2",
-    "Quarter 3"
+    "Quarter 3",
+    "Quarter 4"
   ],
   "tracked": [
     "VENUSREM"
@@ -14,6 +15,10 @@
         "tag": "Beat"
       },
       "Quarter 2": {
+        "note": "",
+        "tag": ""
+      },
+      "Quarter 3": {
         "note": "",
         "tag": ""
       }
