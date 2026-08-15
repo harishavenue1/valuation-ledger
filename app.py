@@ -4,18 +4,25 @@ Valuation Ledger — self-contained Streamlit app.
 
 Runs identically local or deployed (Streamlit Community Cloud via
 GitHub): no absolute local paths, no import from any other project's
-scripts (see screener_fetch.py, bundled alongside this file). The
-Screener.in session cookie comes from st.secrets — Streamlit's own
-secrets mechanism, which transparently reads .streamlit/secrets.toml
+scripts (see screener_fetch.py, bundled alongside this file).
+
+No secrets required to fetch data (verified 2026-08-15) — Screener's
+search API, top-ratios, and full P&L table all work fully anonymously;
+SCREENER_SESSION_ID is optional and currently unused by any fetch this
+app makes (see get_session_id() / fetch_one()'s docstring). GITHUB_TOKEN
+is the one secret worth setting once deployed — see the "GitHub-backed
+sync" section below for why. Both come from st.secrets — Streamlit's
+own mechanism, which transparently reads .streamlit/secrets.toml
 locally and the dashboard-configured secrets when deployed, so the same
 code path works in both places with zero branching.
 
-Setup (local): copy .streamlit/secrets.toml.example to
-.streamlit/secrets.toml and fill in SCREENER_SESSION_ID (git-ignored,
-never commit the real value).
+Setup (local): none required to run. Optionally copy
+.streamlit/secrets.toml.example to .streamlit/secrets.toml and fill in
+GITHUB_TOKEN if you want scenario edits synced (git-ignored, never
+commit the real value).
 
 Setup (Streamlit Community Cloud): push this repo to GitHub, deploy at
-share.streamlit.io, then add SCREENER_SESSION_ID under the app's
+share.streamlit.io, then optionally add GITHUB_TOKEN under the app's
 Settings -> Secrets in the same TOML format.
 
 Run locally:
@@ -59,10 +66,11 @@ st.set_page_config(page_title="Valuation Ledger", page_icon="🧮", layout="wide
 # ───────────────────────── Session cookie (via st.secrets) ─────────────────────────
 
 def get_session_id():
-    """None if not configured — callers must handle that, not assume a
-    value. Reads st.secrets, which Streamlit populates from
-    .streamlit/secrets.toml locally or the Cloud dashboard's Secrets
-    panel when deployed — same lookup, no environment-specific code."""
+    """Optional (verified 2026-08-15) — Screener's search API, top-ratios,
+    and full P&L table all work fully anonymously; see fetch_one()'s
+    docstring in screener_fetch.py. Returns None if not configured,
+    which is the normal case now; callers no longer gate on this, they
+    just pass it through to fetch_one() where it's a no-op when falsy."""
     try:
         return st.secrets["SCREENER_SESSION_ID"]
     except (KeyError, FileNotFoundError):
@@ -648,10 +656,7 @@ def maybe_auto_refresh():
         return
     st.session_state["auto_refresh_checked"] = True
 
-    session_id = get_session_id()
-    if not session_id:
-        return  # nothing to auto-refresh with; manual button already explains why
-
+    session_id = get_session_id()  # optional — fetch_one() works fine with None
     today = date.today().isoformat()
     if load_last_refresh().get("date") == today:
         return
@@ -671,10 +676,8 @@ def page_summary(all_stocks, scenarios):
                     unsafe_allow_html=True)
         return
 
-    session_id = get_session_id()
-    if st.button("🔄 Refresh all now", disabled=not session_id,
-                  help="Re-fetches every company below from Screener.in live"):
-        n = refresh_all_stocks(session_id)
+    if st.button("🔄 Refresh all now", help="Re-fetches every company below from Screener.in live"):
+        n = refresh_all_stocks(get_session_id())
         st.success(f"Refreshed {n} companies.")
         st.rerun()
 
@@ -733,10 +736,9 @@ def page_detail(stock, ticker, scenarios):
         ("52W High", f"₹{fmt(stock.get('week52_high'))}"),
     ])
 
-    session_id = get_session_id()
-    if st.button(f"🔄 Refresh {ticker} now", disabled=not session_id):
+    if st.button(f"🔄 Refresh {ticker} now"):
         with st.spinner("Fetching…"):
-            data, err = fetch_one(ticker, session_id)
+            data, err = fetch_one(ticker, get_session_id())
         if err:
             st.error(err)
         else:
@@ -970,26 +972,18 @@ def section_retrieve(all_stocks):
     st.divider()
     st.subheader("📥 Retrieve from Screener")
 
-    session_id = get_session_id()
-    if not session_id:
-        st.error("No `SCREENER_SESSION_ID` configured — retrieval is disabled until you set it. "
-                 "Local: copy `.streamlit/secrets.toml.example` to `.streamlit/secrets.toml` and fill it in. "
-                 "Deployed: add it under the app's Settings → Secrets on Streamlit Community Cloud.")
-
     with st.form("retrieve_form", clear_on_submit=True):
         col1, col2 = st.columns([4, 1])
         with col1:
             new_ticker = st.text_input("NSE/BSE ticker or company name",
-                                        placeholder="e.g. TITAN, or a numeric BSE code for SME names",
-                                        disabled=not session_id).strip()
+                                        placeholder="e.g. TITAN, or a numeric BSE code for SME names").strip()
         with col2:
             st.write("")
-            submitted = st.form_submit_button("Retrieve", type="primary",
-                                               use_container_width=True, disabled=not session_id)
+            submitted = st.form_submit_button("Retrieve", type="primary", use_container_width=True)
 
     if submitted and new_ticker:
         with st.spinner(f"Fetching {new_ticker} from Screener.in…"):
-            data, err = fetch_one(new_ticker.upper(), session_id)
+            data, err = fetch_one(new_ticker.upper(), get_session_id())
         if err:
             st.error(f"Couldn't fetch **{new_ticker}**: {err}")
         else:

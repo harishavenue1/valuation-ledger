@@ -119,13 +119,24 @@ def yoy_series(vals):
     return out
 
 
-def fetch_one(ticker, session_id):
+def fetch_one(ticker, session_id=None):
     """Returns (data_dict, None) on success or (None, error_message) on
     failure. data_dict["ticker"] is the *resolved canonical* symbol,
     which can differ from the `ticker` argument if you passed free text
     (e.g. "Yash Highvoltage Ltd" resolves to BSE code "544310") —
-    always use data["ticker"] as your storage key, not the input."""
-    headers = {**HEADERS_BASE, "Cookie": f"sessionid={session_id}"}
+    always use data["ticker"] as your storage key, not the input.
+
+    session_id is optional (verified 2026-08-15): Screener's search API,
+    top-ratios, and full multi-year P&L table all return complete data
+    to a fully anonymous request — confirmed against both a large-cap
+    (Titan, 12yr consolidated) and a micro-cap SME (Yash Highvoltage,
+    7yr standalone fallback). No known feature this app uses is gated
+    behind login. Kept as an optional param (unused when None/falsy)
+    rather than removed outright, in case a future Screener change or
+    an as-yet-untested company/data type turns out to need it."""
+    headers = {**HEADERS_BASE}
+    if session_id:
+        headers["Cookie"] = f"sessionid={session_id}"
     resolved = resolve_url(ticker, headers)
     if not resolved:
         return None, f"could not resolve '{ticker}' via Screener's search API"
