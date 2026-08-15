@@ -28,7 +28,7 @@ Settings -> Secrets in the same TOML format.
 Run locally:
     streamlit run app.py
 """
-import json, os, re
+import hmac, json, os, re
 from datetime import date
 
 import streamlit as st
@@ -61,6 +61,44 @@ N_EST_YEARS = 3
 GRID_CASES = [c for c in CASES if c != "mgmt"]
 
 st.set_page_config(page_title="Valuation Ledger", page_icon="🧮", layout="wide")
+
+
+# ───────────────────────── Access gate (via st.secrets) ─────────────────────────
+
+def check_password():
+    """True if the app is unlocked for this browser session — either an
+    APP_PASSWORD secret isn't configured (open access, same posture as
+    before this existed — matches the optional-secret pattern used
+    elsewhere in this file), or the visitor already entered it correctly
+    this session, or they just did on this run.
+
+    Why this exists (added 2026-08-16): every write in this app — Retrieve,
+    Refresh, editing scenario inputs, Remove — runs server-side using the
+    app's own embedded GITHUB_TOKEN. There's no per-visitor distinction
+    otherwise: anyone who reaches the deployed URL can drive all of it,
+    including deleting a tracked company, with zero trace of who did it.
+    A public GitHub repo doesn't grant randoms write access on its own
+    (see README) — but a public *app URL* with no gate functionally does,
+    since the app acts as a privileged proxy for whoever's using it."""
+    try:
+        app_password = st.secrets["APP_PASSWORD"]
+    except (KeyError, FileNotFoundError):
+        return True
+
+    if st.session_state.get("authenticated"):
+        return True
+
+    st.title("🧮 Valuation Ledger")
+    pwd = st.text_input("Password", type="password", key="_pwd_input")
+    if st.button("Unlock"):
+        # Constant-time compare — trivial to add, avoids a timing side
+        # channel on password length/prefix for what little it's worth.
+        if hmac.compare_digest(pwd, app_password):
+            st.session_state["authenticated"] = True
+            st.rerun()
+        else:
+            st.error("Incorrect password.")
+    return False
 
 
 # ───────────────────────── Session cookie (via st.secrets) ─────────────────────────
@@ -1023,7 +1061,10 @@ def section_retrieve(all_stocks):
 # ───────────────────────── Main ─────────────────────────
 
 def main():
-    inject_css()
+    inject_css()  # runs before the password gate too, so the lock screen gets the same dark theme
+    if not check_password():
+        return
+
     st.title("🧮 Valuation Ledger")
 
     maybe_auto_refresh()  # before load_all_stocks(), so a same-day refresh renders fresh, not stale
