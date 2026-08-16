@@ -24,7 +24,12 @@
     "ACE",
     "TDPOWERSYS",
     "BBOX",
-    "BECTORFOOD"
+    "BECTORFOOD",
+    "DIVGIITTS",
+    "E2E",
+    "MCX",
+    "MTARTECH",
+    "WINDLAS"
   ],
   "cells": {
     "VENUSREM": {
