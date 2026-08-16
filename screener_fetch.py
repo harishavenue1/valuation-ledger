@@ -503,6 +503,15 @@ def fetch_one(ticker, session_id=None):
         "quarters": quarters,
         **q_data,
         "fetched_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        # Separate from "fetched_at" (2026-08-16, stale-data flag) —
+        # fetch_price_only() below also stamps "fetched_at" on every
+        # daily price-only refresh, which would make a company's EMA/
+        # quarterly/P&L data look freshly updated when only its price
+        # actually was (merge_price_only() overlays "fetched_at" but
+        # leaves this key alone since price_data never sets it, so it
+        # only ever moves forward on an actual full fetch_one() run —
+        # exactly what a staleness check on the heavier data needs).
+        "fundamentals_fetched_at": time.strftime("%Y-%m-%d %H:%M:%S"),
     }, None
 
 

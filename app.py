@@ -29,7 +29,7 @@ Run locally:
     streamlit run app.py
 """
 import hmac, json, os, re, time
-from datetime import date
+from datetime import date, datetime
 
 import streamlit as st
 
@@ -62,6 +62,14 @@ N_EST_YEARS = 3
 # until someone types something in. Never applied to Management Case,
 # same as guidance seeding.
 DEFAULT_REV_GROWTH = {"base": 20.0, "bull": 25.0, "bear": 15.0}
+
+# Stale-data flag (2026-08-16 request) — "fundamentals_fetched_at" only
+# moves forward on a full fetch_one() run (see screener_fetch.py), not
+# the daily price-only refresh, so this measures actual EMA/quarterly/
+# P&L staleness rather than being fooled by a fresh price. 7 days
+# roughly matches a weekly "Refresh all now" cadence; a company that
+# hasn't had one in longer than that gets flagged.
+STALE_DAYS = 7
 
 # Management Case is dropped from the Future Projections grid and the
 # Summary page table (explicit request, 2026-08-15) — it's never
@@ -1170,6 +1178,34 @@ def maybe_auto_refresh():
     save_last_refresh({"date": today})
 
 
+def staleness_reason(stock):
+    """None when fine, else a short reason string for the Summary row's
+    stale-data badge (2026-08-16 request). Two independent triggers:
+    missing EMA (the exact silent-failure mode hit for CONCORDBIO/AVALON
+    — worth flagging immediately regardless of how recent the fetch
+    timestamp is), and a fundamentals fetch older than STALE_DAYS days
+    (or never done at all, for a company added before this field
+    existed)."""
+    if any(stock.get(k) is None for k in ("ema20d", "ema50d", "ema33w")):
+        return "EMA data missing — refresh all"
+    fund_at = stock.get("fundamentals_fetched_at")
+    if not fund_at:
+        # Field didn't exist before 2026-08-16 — every company tracked
+        # before today lacks it and WAS fetched fully at some point, so
+        # flagging all of them "never refreshed" on the day this ships
+        # would be noise, not signal. Silent until their next full
+        # refresh backfills this; the EMA check above still catches the
+        # cases that actually matter regardless of this field's age.
+        return None
+    try:
+        age_days = (datetime.now() - datetime.strptime(fund_at, "%Y-%m-%d %H:%M:%S")).days
+    except ValueError:
+        return None
+    if age_days > STALE_DAYS:
+        return f"Fundamentals {age_days}d old — refresh all"
+    return None
+
+
 def render_stock_section(stocks, scenarios, section_key, empty_msg):
     """One sortable table — Company/Price/PE/Qtr Sales Gr%/EMA%/Base/Bull/Bear/Own/🗑️ —
     for a pre-filtered subset of all_stocks. Factored out of page_summary
@@ -1243,7 +1279,8 @@ def render_stock_section(stocks, scenarios, section_key, empty_msg):
             upside = (bull_h["share_price"] / price - 1) * 100
         rows.append({"ticker": ticker, "stock": stock, "price": price, "pe": stock.get("pe_ratio"),
                       "case_headline": case_headline, "case_cagr": case_cagr, "upside": upside,
-                      "qtr_sales_g": qtr_sales_g, "qtr_sales_label": qtr_sales_label})
+                      "qtr_sales_g": qtr_sales_g, "qtr_sales_label": qtr_sales_label,
+                      "stale": staleness_reason(stock)})
 
     def sort_value(row, col):
         if col == "name":
@@ -1345,6 +1382,14 @@ def render_stock_section(stocks, scenarios, section_key, empty_msg):
             st.rerun()
         cols[0].markdown(f"<span class='vl-sub' style='display:block;margin-top:-10px;'>{ticker}</span>",
                           unsafe_allow_html=True)
+        if row["stale"]:
+            # Stale-data badge (2026-08-16 request) — only rendered when
+            # there's actually something to flag, silent otherwise so a
+            # healthy row doesn't get cluttered with a "✓ fresh" line.
+            cols[0].markdown(
+                f'<span title="{row["stale"]}" style="display:block;font-size:10.5px;'
+                f'color:var(--vl-brass);margin-top:-8px;">⚠️ {row["stale"]}</span>',
+                unsafe_allow_html=True)
         # Centered, like every other value column (2026-08-16, "spacing
         # is uneven between cols" — Price/P/E were the only two still on
         # plain left-aligned st.write(); the real column gap is a fixed
