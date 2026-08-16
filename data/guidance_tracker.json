@@ -10,7 +10,8 @@
   ],
   "tracked": [
     "VENUSREM",
-    "544310"
+    "544310",
+    "ASTRAMICRO"
   ],
   "cells": {
     "VENUSREM": {
@@ -35,6 +36,40 @@
         "tag": ""
       },
       "Quarter 6": {
+        "note": "",
+        "tag": ""
+      },
+      "Quarter 7": {
+        "note": "",
+        "tag": ""
+      }
+    },
+    "544310": {
+      "Quarter 7": {
+        "note": "",
+        "tag": ""
+      },
+      "Quarter 4": {
+        "note": "",
+        "tag": ""
+      },
+      "Quarter 5": {
+        "note": "",
+        "tag": ""
+      },
+      "Quarter 6": {
+        "note": "",
+        "tag": ""
+      },
+      "Q1 FY26": {
+        "note": "",
+        "tag": ""
+      },
+      "Quarter 2": {
+        "note": "",
+        "tag": ""
+      },
+      "Quarter 3": {
         "note": "",
         "tag": ""
       }
