@@ -722,5 +722,42 @@
       ],
       "assumptions": ""
     }
+  },
+  "HFCL": {
+    "bull": {
+      "drivers": [
+        {
+          "revGrowth": 50.0,
+          "opm": 15.0,
+          "tax": 23.0,
+          "other_income": 66.0,
+          "interest": 242.0,
+          "depreciation": 157.0,
+          "shares": 161.275,
+          "pe": 50.0
+        },
+        {
+          "revGrowth": 25.0,
+          "opm": 15.0,
+          "tax": 23.0,
+          "other_income": 66.0,
+          "interest": 242.0,
+          "depreciation": 157.0,
+          "shares": 161.275,
+          "pe": 25.0
+        },
+        {
+          "revGrowth": 25.0,
+          "opm": 15.0,
+          "tax": 23.0,
+          "other_income": 66.0,
+          "interest": 242.0,
+          "depreciation": 157.0,
+          "shares": 161.275,
+          "pe": 25.0
+        }
+      ],
+      "assumptions": ""
+    }
   }
 }
