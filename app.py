@@ -63,6 +63,19 @@ N_EST_YEARS = 3
 # same as guidance seeding.
 DEFAULT_REV_GROWTH = {"base": 20.0, "bull": 25.0, "bear": 15.0}
 
+# compute_model()'s full driver field set — module-level (2026-08-16,
+# hoisted out of render_projections_grid() so the Annual Results table's
+# Playaround column, a second/independent user of the same fields, can
+# share one definition instead of a duplicate copy drifting out of sync).
+EDITABLE_FIELDS = ["revGrowth", "opm", "tax", "other_income", "interest", "depreciation", "shares"]
+FIELD_STEP = {"revGrowth": 0.5, "opm": 0.5, "tax": 0.5, "other_income": 1.0,
+              "interest": 1.0, "depreciation": 1.0, "shares": 0.01}
+FIELD_DIGITS = {"revGrowth": 1, "opm": 1, "tax": 1, "other_income": 1,
+                 "interest": 1, "depreciation": 1, "shares": 3}
+FIELD_LABEL = {"revGrowth": "Revenue Growth %", "opm": "OPM %", "tax": "Tax %",
+               "other_income": "Other Income Cr", "interest": "Interest Expense Cr",
+               "depreciation": "Depreciation Cr", "shares": "Number of Shares Cr"}
+
 # Stale-data flag (2026-08-16 request) — "fundamentals_fetched_at" only
 # moves forward on a full fetch_one() run (see screener_fetch.py), not
 # the daily price-only refresh, so this measures actual EMA/quarterly/
@@ -758,7 +771,53 @@ def inject_css():
        * the whole time it's pinned, not a separate control underneath
        * it. top offset vertically centers it in the bar's ~54px height
        * (10px padding × 2 + ~34px line height at 28px font). */
-      .st-key-vl_sticky_back_btn { position: fixed; top: 68px; left: 80px; z-index: 101; }
+      /* pointer-events:none on the container + auto on the button itself
+       * (2026-08-16 fix, "projections, annual, quarter links are not
+       * clickable") — Streamlit's own layout CSS stretches this
+       * st.container()'s div to the FULL viewport width even once taken
+       * out of flow by position:fixed (confirmed live: computed width
+       * 1280px spanning the entire sticky bar), so without this the
+       * invisible overflow past the button's own edges silently ate
+       * every click across that whole horizontal strip — including the
+       * section-jump nav links on the opposite side of the bar, which
+       * is what actually surfaced this (the button itself was never
+       * reported broken since it sits inside its own hit area). */
+      .st-key-vl_sticky_back_btn { position: fixed; top: 68px; left: 80px; z-index: 101;
+        pointer-events: none; }
+      .st-key-vl_sticky_back_btn button { pointer-events: auto; }
+
+      /* Section-jump nav — top-right corner of the sticky bar, styled to
+       * look exactly like the Back button on the opposite corner
+       * (2026-08-16, "just like back to summary add these buttons too")
+       * — but still plain <a> anchors underneath, not real st.button()s.
+       * Deliberate: a real st.button() here would need its own fixed-
+       * position st.container() wrapper, and that's exactly the wrapper
+       * that turned out to silently stretch to the full viewport width
+       * under position:fixed and swallow clicks across the whole bar
+       * (see .st-key-vl_sticky_back_btn's fix above) — three of those
+       * side by side would also fight Streamlit's column-splitting over
+       * that same phantom full width instead of clustering top-right.
+       * A plain anchor is just an inline element sized to its own text,
+       * so it can't hit either problem, and a native href="#id" jump
+       * needs no Python round-trip/rerun to scroll. Colors/padding/
+       * radius match the Back button's actual computed style (measured
+       * live) via this app's own CSS tokens instead of hardcoding
+       * Streamlit's raw defaults. */
+      .vl-sticky-nav { position: fixed; top: 68px; right: 80px; z-index: 101;
+        display: flex; gap: 10px; }
+      .vl-sticky-nav a {
+        display: inline-block; background: var(--vl-surface); border: 1px solid var(--vl-border);
+        border-radius: 8px; padding: 6px 14px; color: var(--vl-ink); text-decoration: none;
+        font-size: 14px; line-height: 1.4;
+      }
+      .vl-sticky-nav a:hover { border-color: var(--vl-accent); color: var(--vl-accent); }
+
+      /* Scroll offset for the anchors those links jump to — without this
+       * the fixed sticky bar (position:fixed, ~64px tall) would cover the
+       * top of whatever section just scrolled into view, same problem
+       * this app already solved once for the page's own initial-load
+       * spacer (see .vl-sticky-header's own comment). */
+      #vl-detail-projections, #vl-detail-annual, #vl-detail-quarterly { scroll-margin-top: 80px; }
 
       .vl-stat-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 6px 0 14px; }
       .vl-stat { background: var(--vl-surface); border: 1px solid var(--vl-border); border-radius: 10px;
@@ -885,6 +944,19 @@ def inject_css():
          fields. Critical-input rows (Revenue Growth %/OPM %/Tax %) get a
          brass underline via :has() + the widget's own aria-label. */
       div[data-testid="stNumberInput"] { margin-bottom: 0 !important; }
+      /* stNumberInputContainer (an inner wrapper, not the input itself)
+       * carries ~10px of its own padding by default — invisible on its
+       * own, but it makes any row with a number_input cell 40px tall
+       * against 25.6px for a plain-markdown row next to it (measured
+       * live), reading as uneven/"distorted" row spacing down the table
+       * (2026-08-16, "row heights and spacing got distorted" — surfaced
+       * once the Annual Results Playaround column mixed input rows and
+       * computed rows for the first time; the Projections grid never
+       * hit this since every one of its rows is inputs-only, uniformly
+       * tall already). Pinned to the input's own 30px so every row
+       * matches regardless of whether that row's cells are text or a
+       * widget. */
+      div[data-testid="stNumberInputContainer"] { height: 30px !important; padding: 0 !important; }
       div[data-testid="stNumberInput"] input {
         background: transparent !important; border: none !important;
         border-bottom: 1px dashed var(--vl-faint) !important; border-radius: 0 !important;
@@ -925,6 +997,29 @@ def inject_css():
        * math never has to guess the exact pixel budget. */
       .st-key-vl_projections_grid div[data-testid="stHorizontalBlock"] > div:first-child p {
         font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+
+      /* Annual Results table's Playaround column — a subtle brass tint +
+       * left rule marking it as the one interactive/scratch column
+       * against the plain historical years to its left (2026-08-16, "a
+       * playaround column after latest annual results columns"). Always
+       * the last column regardless of how many actual years a company
+       * has, so :last-child needs no row-count math. Scoped to this
+       * table's own container key, not global. */
+      .st-key-vl_annual_table div[data-testid="stHorizontalBlock"] > div:last-child {
+        background: rgba(224,179,77,0.06); border-left: 1px solid var(--vl-border); padding-left: 8px;
+      }
+      /* Playaround column's number_input values right-aligned (2026-08-16,
+       * "indent the values to right side of the column") — matches the
+       * right-aligned historical-year columns beside them (hist_cell_html
+       * uses text-align:right), so the whole row reads on one consistent
+       * axis. Scoped to this table only — the global number_input rule
+       * (see its own comment further up) deliberately centers the
+       * Projections grid's inputs instead, a separate explicit request
+       * ("numbers indented are messed, let's keep center"), and this
+       * must not override that. */
+      .st-key-vl_annual_table div[data-testid="stNumberInput"] input {
+        text-align: right !important; padding-right: 10px !important;
       }
     </style>
     """, unsafe_allow_html=True)
@@ -1771,6 +1866,20 @@ def page_detail(stock, ticker, scenarios):
         f'<span class="vl-sticky-detail">'
         f'<span class="vl-sticky-sep">·</span>₹{fmt(stock.get("current_price"))}'
         f'<span class="vl-sticky-sep">·</span>PE {fmt(stock.get("pe_ratio"), 1)}x</span>'
+        # Section-jump nav (2026-08-16, "add buttons at top header on
+        # details page switch to projections / annual / quarter
+        # sections", then "keep it on top right corner of header") —
+        # plain anchor links, not st.button()s: a native in-page scroll
+        # is all "switch to X section" needs, no Python-side state or
+        # rerun involved. Fixed-positioned independent of the bar's own
+        # centered flex content, same trick as the Back button on the
+        # opposite corner (see .st-key-vl_sticky_back_btn) — mirrored to
+        # the right edge instead of the left.
+        f'<span class="vl-sticky-nav">'
+        f'<a href="#vl-detail-projections">Projections</a>'
+        f'<a href="#vl-detail-annual">Annual</a>'
+        f'<a href="#vl-detail-quarterly">Quarter</a>'
+        f'</span>'
         f'</div>'
         # Spacer — the bar above is position:fixed (out of flow), so
         # without this the page's own content renders right under
@@ -1837,52 +1946,24 @@ def page_detail(stock, ticker, scenarios):
     # started recently despite decades of standalone history), so this
     # varies stock to stock and the label needs to say which it got.
     basis = "consolidated" if stock.get("consolidated") else "standalone"
-    # H2 + caption (2026-08-16, "add same way header to annual result as
-    # well" — matching Qtr Results' own st.header() + st.caption() pair,
-    # in place of the plain st.caption()-only line this used to be).
-    st.header("Annual Results")
-    st.caption(f"Screener.in, {basis} — annual Profit & Loss")
 
-    n = len(stock["years"])
-    hist_col_widths = [2.2] + [1] * n
-
-    def hist_row(label, vals, digits=0, suffix="", colorize=False, bold=False):
-        cols = st.columns(hist_col_widths)
-        cols[0].markdown(("**" + label + "**") if bold else label)
-        for j, v in enumerate(vals):
-            cols[1 + j].markdown(hist_cell_html(v, digits, suffix, colorize, bold), unsafe_allow_html=True)
-
-    hdr = st.columns(hist_col_widths)
-    hdr[0].markdown("**Financial Year**")
-    for j, y in enumerate(stock["years"]):
-        hdr[1 + j].markdown(f"<div style='text-align:right;color:var(--vl-faint);font-size:13.5px;"
-                             f"font-weight:700;'>{y}</div>", unsafe_allow_html=True)
-
-    hist_row("Revenue Cr", stock["revenue"], bold=True)
-    hist_row("Revenue Growth %", stock["revenue_growth_pct"], 1, "%", colorize=True)
-    hist_row("Expenses Cr", stock["expenses"])
-    hist_row("Operating Profit Cr", stock["operating_profit"], bold=True)
-    hist_row("OPM %", stock["opm_pct"], 1, "%", colorize=True)
-    hist_row("Other Income Cr", stock["other_income"])
-    hist_row("Interest Expense Cr", stock["interest"])
-    hist_row("Depreciation Cr", stock["depreciation"])
-    hist_row("PBT Cr", stock["pbt"], bold=True)
-    hist_row("Tax %", stock["tax_pct"], 1, "%")
-    hist_row("PAT Cr", stock["net_profit"], bold=True)
-    hist_row("PAT Growth %", stock["pat_growth_pct"], 1, "%", colorize=True)
-    hist_row("Number of Shares Cr", stock["shares_cr"], 3)
-    hist_row("EPS ₹", stock["eps"], 2, bold=True)
-
+    # Section order: Quarterly → Annual → Projections (2026-08-16, "move
+    # the quarterly results as 1st section on details, then annual, and
+    # finally projections" — same three sections and same code as
+    # before, just resequenced; anchor ids are unchanged so the sticky
+    # header's Projections/Annual/Quarter nav links keep working exactly
+    # as they did before this reorder).
+    #
     # Quarterly Results (2026-08-16 request: "can we also pull in
-    # quarterly results") — same table shape as the annual one above, just
-    # quarter-labeled columns; growth% is YoY (same-quarter-prior-year,
-    # date-matched — see screener_fetch.py's module docstring for why not
-    # a fixed -4 offset), not QoQ, to avoid seasonal noise. Missing
-    # entirely (old cached fetch from before this existed, or the section
-    # wasn't found/parseable for this company) degrades to just not
-    # showing the table — same best-effort posture as EMAs.
+    # quarterly results") — same table shape as the annual one below,
+    # just quarter-labeled columns; growth% is YoY (same-quarter-prior-
+    # year, date-matched — see screener_fetch.py's module docstring for
+    # why not a fixed -4 offset), not QoQ, to avoid seasonal noise.
+    # Missing entirely (old cached fetch from before this existed, or
+    # the section wasn't found/parseable for this company) degrades to
+    # just not showing the table — same best-effort posture as EMAs.
     if stock.get("quarters"):
-        st.divider()
+        st.markdown('<div id="vl-detail-quarterly"></div>', unsafe_allow_html=True)
         # H2 (2026-08-16, "add a mid page header H2 as Qtr Results") —
         # st.header(), not the st.subheader() (H3) every other section
         # label in this app uses, so this reads as a step up/more
@@ -1895,7 +1976,7 @@ def page_detail(stock, ticker, scenarios):
 
         def q_cell_html(v, digits, suffix, colorize, bold):
             # Own (bigger) cell renderer, not hist_cell_html — that one's
-            # shared with the annual table above, which wasn't part of
+            # shared with the annual table below, which wasn't part of
             # this "too small" complaint; sizing it up here only avoids
             # quietly resizing the annual table along with it.
             text = fmt(v, digits, suffix)
@@ -1933,6 +2014,147 @@ def page_detail(stock, ticker, scenarios):
         q_row("PAT Growth % (YoY)", stock.get("q_pat_growth_pct", []), 1, "%", colorize=True)
         q_row("EPS ₹", stock.get("q_eps", []), 2, bold=True)
 
+        st.divider()
+
+    # Anchor for the sticky header's section-jump nav (2026-08-16, "add
+    # buttons at top header on details page switch to projections /
+    # annual / quarter sections") — plain HTML anchor + scroll-margin-top
+    # (see inject_css()), not a Streamlit widget/rerun, since a native
+    # in-page jump is all this needs.
+    st.markdown('<div id="vl-detail-annual"></div>', unsafe_allow_html=True)
+    # H2 + caption (2026-08-16, "add same way header to annual result as
+    # well" — matching Qtr Results' own st.header() + st.caption() pair,
+    # in place of the plain st.caption()-only line this used to be).
+    st.header("Annual Results")
+    st.caption(f"Screener.in, {basis} — annual Profit & Loss")
+
+    n = len(stock["years"])
+    # Playaround column — a free-standing one-year scratch projection
+    # appended right after the last actual year (2026-08-16 request: "a
+    # playaround column after latest annual results columns, so I can
+    # project how values changes for various inputs... on rev growth,
+    # opm margin, tax, profit growth, future PE, EPS"). Session-only (not
+    # saved to scenarios.json like Base/Bull/Bear) — this is a scratchpad
+    # for "what if", not a case worth persisting across visits. Reuses
+    # compute_model(), the exact same one-year-driver math the Base/Bull/
+    # Bear Projections grid runs, just for a single ad hoc column instead
+    # of three named cases × three years.
+    hist_col_widths = [2.2] + [1] * n + [1.3]
+
+    def pg_key(field):
+        return f"{ticker}_playaround_{field}"
+
+    def last_or(arr, fallback):
+        return arr[-1] if arr else fallback
+
+    # Pass 1: read this session's current playaround inputs (seeded from
+    # the latest actual year on first render — "as if nothing changes"
+    # is the natural starting point to tweak from), then run the model —
+    # same two-pass shape render_projections_grid() uses below, needed
+    # because the computed rows (Revenue Cr, PAT Cr, EPS ₹, ...) render
+    # further down the table than the input rows and must reflect
+    # whatever's currently typed, not last render's stale value. All 7
+    # EDITABLE_FIELDS now tunable here, not just Revenue Growth/OPM/Tax
+    # (2026-08-16, "enable other playaround fields to experiment for
+    # various inputs") — Other Income/Interest/Depreciation/Shares were
+    # pinned to the last actual value at first, editable from here on.
+    pg_seed = {
+        "revGrowth": last_or(stock.get("revenue_growth_pct"), DEFAULT_REV_GROWTH["base"]),
+        "opm": last_or(stock.get("opm_pct"), 20.0),
+        "tax": last_or(stock.get("tax_pct"), 25.0),
+        "other_income": last_or(stock.get("other_income"), 0),
+        "interest": last_or(stock.get("interest"), 0),
+        "depreciation": last_or(stock.get("depreciation"), 0),
+        "shares": last_or(stock.get("shares_cr"), 0),
+    }
+    pg_effective = {f: as_float(st.session_state.get(pg_key(f), pg_seed[f])) for f in pg_seed}
+    pg_pe_seed = stock.get("pe_ratio") or 20.0
+    pg_pe = as_float(st.session_state.get(pg_key("pe"), pg_pe_seed))
+    pg_driver = {**pg_effective, "pe": pg_pe}
+    pg_model = compute_model(stock, {"drivers": [pg_driver]})[0]
+    pg_implied_price = (pg_model["eps"] * pg_pe if pg_model["eps"] is not None and pg_pe else None)
+    # CAGR to that implied price (2026-08-16 request) — same cagr_for()
+    # math the Base/Bull/Bear chips use (see headline_cagr()); one
+    # driver here = one step forward from the last actual year, same as
+    # compute_model()'s own convention, so the target year is simply
+    # last_year + 1.
+    pg_year = int(stock["years"][-1].split(" ")[1]) + 1
+    pg_cagr = cagr_for(stock["current_price"], pg_implied_price, days_until(pg_year))
+
+    def hist_row(label, vals, digits=0, suffix="", colorize=False, bold=False,
+                 pg_field=None, pg_value=None):
+        """pg_field set → last cell is an editable number_input, one of
+        EDITABLE_FIELDS, using that field's own step/digits (module-
+        level FIELD_STEP/FIELD_DIGITS, shared with the Projections grid
+        below — Number of Shares Cr needs 3 decimals/0.01 steps, not the
+        1-decimal/0.5 steps every percentage/Cr row otherwise uses).
+        pg_value set (pg_field None) → last cell is a plain computed
+        display value, same hist_cell_html rendering the historical
+        columns use. Neither → last cell blank."""
+        cols = st.columns(hist_col_widths)
+        cols[0].markdown(("**" + label + "**") if bold else label)
+        for j, v in enumerate(vals):
+            cols[1 + j].markdown(hist_cell_html(v, digits, suffix, colorize, bold), unsafe_allow_html=True)
+        with cols[1 + n]:
+            if pg_field:
+                st.number_input(label, value=pg_effective[pg_field], step=FIELD_STEP[pg_field],
+                                 format=f"%.{FIELD_DIGITS[pg_field]}f", key=pg_key(pg_field),
+                                 label_visibility="collapsed")
+            elif pg_value is not None:
+                st.markdown(hist_cell_html(pg_value, digits, suffix, colorize, bold), unsafe_allow_html=True)
+
+    with st.container(key="vl_annual_table"):
+        hdr = st.columns(hist_col_widths)
+        hdr[0].markdown("**Financial Year**")
+        for j, y in enumerate(stock["years"]):
+            hdr[1 + j].markdown(f"<div style='text-align:right;color:var(--vl-faint);font-size:13.5px;"
+                                 f"font-weight:700;'>{y}</div>", unsafe_allow_html=True)
+        hdr[1 + n].markdown("<div style='text-align:center;color:var(--vl-brass);font-size:13.5px;"
+                             "font-weight:700;'>🧪 Playaround</div>", unsafe_allow_html=True)
+
+        hist_row("Revenue Cr", stock["revenue"], bold=True, pg_value=pg_model["revenue"])
+        hist_row("Revenue Growth %", stock["revenue_growth_pct"], 1, "%", colorize=True, pg_field="revGrowth")
+        hist_row("Expenses Cr", stock["expenses"], pg_value=pg_model["expenses"])
+        hist_row("Operating Profit Cr", stock["operating_profit"], bold=True, pg_value=pg_model["operating_profit"])
+        hist_row("OPM %", stock["opm_pct"], 1, "%", colorize=True, pg_field="opm")
+        hist_row("Other Income Cr", stock["other_income"], pg_field="other_income")
+        hist_row("Interest Expense Cr", stock["interest"], pg_field="interest")
+        hist_row("Depreciation Cr", stock["depreciation"], pg_field="depreciation")
+        hist_row("PBT Cr", stock["pbt"], bold=True, pg_value=pg_model["pbt"])
+        hist_row("Tax %", stock["tax_pct"], 1, "%", pg_field="tax")
+        hist_row("PAT Cr", stock["net_profit"], bold=True, pg_value=pg_model["pat"])
+        hist_row("PAT Growth %", stock["pat_growth_pct"], 1, "%", colorize=True, pg_value=pg_model["pat_growth"])
+        hist_row("Number of Shares Cr", stock["shares_cr"], 3, pg_field="shares")
+        hist_row("EPS ₹", stock["eps"], 2, bold=True, pg_value=pg_model["eps"])
+
+        # Future PE + the payoff number this whole column is for — what
+        # that EPS × that PE implies for the share price, same share-
+        # price math headline_cagr() uses for the Base/Bull/Bear chips.
+        pe_cols = st.columns(hist_col_widths)
+        pe_cols[0].markdown("**Future PE**")
+        with pe_cols[1 + n]:
+            st.number_input("Future PE", value=pg_pe, step=0.5, format="%.1f",
+                             key=pg_key("pe"), label_visibility="collapsed")
+        price_cols = st.columns(hist_col_widths)
+        price_cols[0].markdown("**Implied Price ₹**")
+        # Right-aligned, not centered (2026-08-16, "indent the implied
+        # price as well similar to other rows") — matches every other
+        # value in the column now that they're right-aligned too (see
+        # the Playaround-column CSS override further up).
+        price_cols[1 + n].markdown(
+            f'<div style="text-align:right;padding-right:10px;font-size:15px;font-weight:700;'
+            f'color:var(--vl-brass);">{fmt(pg_implied_price)}</div>', unsafe_allow_html=True)
+
+        # CAGR row (2026-08-16 request) — same annualized-return framing
+        # as the Base/Bull/Bear chips and the Projections grid's own CAGR
+        # row, just for this one ad hoc column/year.
+        cagr_cols = st.columns(hist_col_widths)
+        cagr_cols[0].markdown("**CAGR**")
+        cagr_cls = "vl-pos" if pg_cagr is not None and pg_cagr >= 0 else "vl-neg" if pg_cagr is not None else ""
+        cagr_cols[1 + n].markdown(
+            f'<div style="text-align:right;padding-right:10px;font-size:15px;font-weight:700;">'
+            f'<span class="{cagr_cls}">{fmt_signed(pg_cagr, 1)}</span></div>', unsafe_allow_html=True)
+
     st.divider()
     render_projections_grid(stock, ticker, scenarios)
 
@@ -1945,6 +2167,7 @@ def render_projections_grid(stock, ticker, scenarios):
     wasn't using ("input boxes are very wide enough" — plenty of spare
     horizontal room). One metric per row, with all Year×Case combinations
     as columns in that same row, uses the width instead of the scroll."""
+    st.markdown('<div id="vl-detail-projections"></div>', unsafe_allow_html=True)
     st.subheader("🎯 Future Projections & CAGR — all cases, all years, one grid")
 
     # GRID_CASES (module-level) excludes "mgmt" here too — see its
@@ -1958,15 +2181,6 @@ def render_projections_grid(stock, ticker, scenarios):
                 icon="📋")
 
     case_states = {c: get_case_state(scenarios, stock, ticker, c) for c in GRID_CASES}
-
-    EDITABLE_FIELDS = ["revGrowth", "opm", "tax", "other_income", "interest", "depreciation", "shares"]
-    FIELD_STEP = {"revGrowth": 0.5, "opm": 0.5, "tax": 0.5, "other_income": 1.0,
-                  "interest": 1.0, "depreciation": 1.0, "shares": 0.01}
-    FIELD_DIGITS = {"revGrowth": 1, "opm": 1, "tax": 1, "other_income": 1,
-                     "interest": 1, "depreciation": 1, "shares": 3}
-    FIELD_LABEL = {"revGrowth": "Revenue Growth %", "opm": "OPM %", "tax": "Tax %",
-                   "other_income": "Other Income Cr", "interest": "Interest Expense Cr",
-                   "depreciation": "Depreciation Cr", "shares": "Number of Shares Cr"}
 
     def widget_key(case, field, i):
         return f"{ticker}_{case}_{field}_{i}"
