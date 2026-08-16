@@ -3500,7 +3500,8 @@
       7.29,
       1.36
     ],
-    "fetched_at": "2026-08-16 13:37:28"
+    "fetched_at": "2026-08-16 13:37:28",
+    "owned": true
   },
   "KRISHNADEF": {
     "ticker": "KRISHNADEF",
