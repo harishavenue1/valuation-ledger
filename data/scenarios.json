@@ -685,5 +685,42 @@
       ],
       "assumptions": ""
     }
+  },
+  "ANLON": {
+    "bull": {
+      "drivers": [
+        {
+          "revGrowth": 40.0,
+          "opm": 20.0,
+          "tax": 26.0,
+          "other_income": 1.0,
+          "interest": 2.0,
+          "depreciation": 1.0,
+          "shares": 0.631,
+          "pe": 40.0
+        },
+        {
+          "revGrowth": 25.0,
+          "opm": 20.0,
+          "tax": 26.0,
+          "other_income": 1.0,
+          "interest": 2.0,
+          "depreciation": 1.0,
+          "shares": 0.631,
+          "pe": 25.0
+        },
+        {
+          "revGrowth": 25.0,
+          "opm": 20.0,
+          "tax": 26.0,
+          "other_income": 1.0,
+          "interest": 2.0,
+          "depreciation": 1.0,
+          "shares": 0.631,
+          "pe": 25.0
+        }
+      ],
+      "assumptions": ""
+    }
   }
 }
