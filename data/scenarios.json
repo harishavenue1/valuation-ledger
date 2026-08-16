@@ -537,5 +537,42 @@
       ],
       "assumptions": ""
     }
+  },
+  "MANORAMA": {
+    "bull": {
+      "drivers": [
+        {
+          "revGrowth": 40.0,
+          "opm": 26.0,
+          "tax": 27.0,
+          "other_income": 10.0,
+          "interest": 38.0,
+          "depreciation": 26.0,
+          "shares": 5.973,
+          "pe": 40.0
+        },
+        {
+          "revGrowth": 25.0,
+          "opm": 26.0,
+          "tax": 27.0,
+          "other_income": 10.0,
+          "interest": 38.0,
+          "depreciation": 26.0,
+          "shares": 5.973,
+          "pe": 25.0
+        },
+        {
+          "revGrowth": 25.0,
+          "opm": 26.0,
+          "tax": 27.0,
+          "other_income": 10.0,
+          "interest": 38.0,
+          "depreciation": 26.0,
+          "shares": 5.973,
+          "pe": 25.0
+        }
+      ],
+      "assumptions": ""
+    }
   }
 }
