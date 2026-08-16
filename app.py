@@ -28,12 +28,12 @@ Settings -> Secrets in the same TOML format.
 Run locally:
     streamlit run app.py
 """
-import hmac, json, os, re
+import hmac, json, os, re, time
 from datetime import date
 
 import streamlit as st
 
-from screener_fetch import fetch_one
+from screener_fetch import fetch_one, fetch_price_only
 
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
 GUIDANCE_DIR = os.path.join(CACHE_DIR, "guidance")
@@ -208,6 +208,20 @@ def merge_fetched(existing, new_data):
     if existing:
         new_data = {**new_data, "owned": existing.get("owned", False)}
     return new_data
+
+
+def merge_price_only(existing, price_data):
+    """For the lightweight price-only refresh (2026-08-16, "2 refresh for
+    fundamental data & prices alone, as prices do need daily updates") —
+    unlike merge_fetched() (a full fetch_one() replacement, preserving
+    only "owned"), this OVERLAYS price_data's handful of fields (ticker/
+    name/current_price/pe_ratio/market_cap_cr/week52_high/fetched_at)
+    onto the existing record, preserving everything else as-is
+    (years/revenue/.../ema*/quarters/owned — fetch_price_only() never
+    touches any of that, so there's nothing there to lose)."""
+    if not existing:
+        return price_data
+    return {**existing, **price_data}
 
 
 def load_all_stocks():
@@ -630,6 +644,32 @@ def est_year_label(stock, i, fy=False):
     return f"FY{last_year + i + 1}" if fy else f"Mar {last_year + i + 1}"
 
 
+# Indian fiscal year (Apr-Mar) quarter-end month → (quarter number, FY-year
+# offset). Only Mar stays in the same calendar year as its own FY label;
+# Jun/Sep/Dec quarter-ends fall in the FY that finishes the FOLLOWING
+# March, hence +1 (e.g. "Sep 2026" is Q2 of FY27 = Apr2026-Mar2027, not
+# FY26). 2-digit FY (Q2FY27, not Q2FY2027) — 2026-08-16 request: "can we
+# give which quarterSalesGrowth like Q2FY27" — a different, more compact
+# convention than est_year_label()'s 4-digit "FY2027" used for annual
+# estimates; quarters are commonly written the short way.
+FISCAL_QUARTER_MAP = {"Mar": (4, 0), "Jun": (1, 1), "Sep": (2, 1), "Dec": (3, 1)}
+
+
+def fiscal_quarter_label(period_label):
+    """"Sep 2026" -> "Q2FY27". Returns the input unchanged if it isn't a
+    recognizable "Mon YYYY" quarter-end label (e.g. a Half-Yearly period
+    for an SME-listed company reports different months than the standard
+    Mar/Jun/Sep/Dec quarter-ends)."""
+    if not period_label:
+        return period_label
+    parts = period_label.strip().split()
+    if len(parts) != 2 or parts[0] not in FISCAL_QUARTER_MAP or not parts[1].isdigit():
+        return period_label
+    q, offset = FISCAL_QUARTER_MAP[parts[0]]
+    fy = (int(parts[1]) + offset) % 100
+    return f"Q{q}FY{fy:02d}"
+
+
 # ───────────────────────── Theme ─────────────────────────
 
 def inject_css():
@@ -656,6 +696,61 @@ def inject_css():
 
       .vl-empty { background: var(--vl-surface); border: 1px dashed var(--vl-border); border-radius: 12px;
                   padding: 40px 24px; text-align: center; color: var(--vl-muted); margin: 18px 0; }
+
+      /* Detail page's slim sticky header (2026-08-16, "static header on
+       * scrolling down... just like screener") — pinned to the top of
+       * the viewport so the company/ticker/price stays visible however
+       * far down the annual/quarterly tables or projections grid you've
+       * scrolled. position:fixed, not sticky — measured (DOM walk +
+       * scroll test) that Streamlit's actual scroll container is
+       * section[data-testid="stMain"], a flex container, and sticky
+       * simply didn't engage there (computed style showed
+       * position:sticky/top:0 correctly applied, but the element still
+       * scrolled off-screen with the content instead of pinning) for
+       * reasons that didn't trace to any single ancestor's overflow/
+       * transform; fixed relative to the viewport sidesteps needing to
+       * know why. top:60px clears Streamlit's own toolbar (measured
+       * height); left/right hardcode the ~80px page padding measured at
+       * this app's normal wide-layout width rather than reading it live.
+       * Opaque background (not transparent) is the whole point of a
+       * pinned bar — otherwise page content scrolls up underneath and
+       * shows through it. z-index above normal content, below the
+       * toolbar itself. */
+      .vl-sticky-header {
+        position: fixed; top: 60px; left: 0; right: 0; z-index: 100; background: var(--vl-bg);
+        /* Symmetric padding + justify-content:center (2026-08-16, "move
+         * name to mid of screen as back to summary is very close to
+         * name") — the earlier asymmetric 240px-left/80px-right padding
+         * (to clear the Back button) skewed centering off-true by that
+         * same 160px difference, landing the name right next to the
+         * button instead of in the middle of the screen. Back button
+         * stays independent (position:fixed, doesn't consume flex space
+         * here) at left:80px, now with real distance from a name that's
+         * centered across the FULL bar width instead. */
+        padding: 10px 80px; border-bottom: 1px solid var(--vl-border);
+        color: var(--vl-ink); display: flex; justify-content: center; align-items: baseline;
+        gap: 16px; flex-wrap: wrap;
+      }
+      /* Company name — first bumped to match st.title()'s H1 (44px) per an
+       * earlier request, then dialed back down (2026-08-16, "reduce font
+       * size as its too big for static header") to match st.subheader()'s
+       * own H3 size instead (measured live: 28px/600) — prominent enough
+       * to read as a header, not overwhelming a bar that's pinned on
+       * screen the whole time. Ticker/price/PE kept as a smaller
+       * secondary line so the name stays the clear visual anchor. */
+      .vl-sticky-name { font-size: 28px; font-weight: 600; line-height: 1.3; }
+      .vl-sticky-header .vl-sub { font-size: 15px; font-weight: 400; }
+      .vl-sticky-detail { font-size: 14px; color: var(--vl-muted); }
+      .vl-sticky-sep { color: var(--vl-faint); margin: 0 10px; }
+
+      /* Back button — fixed-positioned over the sticky bar's left side
+       * (independent of the bar's own flex/centering, since fixed
+       * elements don't consume flex space) instead of rendering as a
+       * normal below-the-bar element, so it reads as part of the header
+       * the whole time it's pinned, not a separate control underneath
+       * it. top offset vertically centers it in the bar's ~54px height
+       * (10px padding × 2 + ~34px line height at 28px font). */
+      .st-key-vl_sticky_back_btn { position: fixed; top: 68px; left: 80px; z-index: 101; }
 
       .vl-stat-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 6px 0 14px; }
       .vl-stat { background: var(--vl-surface); border: 1px solid var(--vl-border); border-radius: 10px;
@@ -883,8 +978,34 @@ def ema_pct_html(price, ema_value):
     if price is None or ema_value is None or ema_value == 0:
         return '<div style="text-align:center;"><span class="vl-sub">—</span></div>'
     pct = (price - ema_value) / ema_value * 100
+    return pct_value_html(pct)
+
+
+def pct_value_html(pct):
+    """Bare signed %, centered and color-coded — the same rendering
+    ema_pct_html ends on, factored out (2026-08-16) so the Summary
+    table's new Qtr Sales Gr% column (latest-quarter YoY, see
+    render_stock_section) can reuse it without duplicating the markup."""
+    if pct is None:
+        return '<div style="text-align:center;"><span class="vl-sub">—</span></div>'
     cls = "vl-pos" if pct >= 0 else "vl-neg"
     return f'<div style="text-align:center;"><span class="{cls}" style="font-weight:700;">{fmt_signed(pct)}</span></div>'
+
+
+def qtr_sales_growth_html(quarter_label, pct):
+    """Summary table's Qtr Sales Gr% cell — which quarter as a small
+    header line (Q2FY27, see fiscal_quarter_label()), then the YoY %
+    below it, same two-line pattern as case_summary_cell_html's FY-year
+    mini-header (2026-08-16, "instead of generic name, can we give which
+    quarterSalesGrowth like Q2FY27" — a bare % alone didn't say which
+    quarter it was for)."""
+    if pct is None or not quarter_label:
+        return '<div style="text-align:center;"><span class="vl-sub">—</span></div>'
+    cls = "vl-pos" if pct >= 0 else "vl-neg"
+    return (f'<div style="text-align:center;">'
+            f'<div style="font-size:10.5px;font-weight:700;color:var(--vl-faint);">'
+            f'{fiscal_quarter_label(quarter_label)}</div>'
+            f'<span class="{cls}" style="font-weight:700;">{fmt_signed(pct)}</span></div>')
 
 
 def hist_cell_html(v, digits, suffix, colorize, bold):
@@ -911,6 +1032,17 @@ def refresh_all_stocks(session_id, show_progress=True):
         return 0
     progress = st.progress(0.0, text="Refreshing…") if show_progress else None
     for i, t in enumerate(tickers):
+        # Small pacing gap between tickers (2026-08-16, "EMA distance
+        # missing for many companies") — each fetch_one() already hits
+        # 4 endpoints (search, page, 2x chart API) with zero delay
+        # between THEM; back-to-back across many tickers with no gap
+        # here too compounds that into a burst confirmed to cause
+        # transient chart-API failures (silently degrading EMAs to None
+        # — see fetch_price_series()'s own retry, added alongside this).
+        # Skipped before the FIRST ticker so a single-company refresh
+        # (or this loop's very start) isn't slowed down for nothing.
+        if i > 0:
+            time.sleep(0.4)
         data, err = fetch_one(t, session_id)
         if not err:
             raw[t] = merge_fetched(raw.get(t), data)
@@ -922,16 +1054,57 @@ def refresh_all_stocks(session_id, show_progress=True):
     return len(tickers)
 
 
+def refresh_prices_only(session_id, show_progress=True):
+    """Lightweight sibling of refresh_all_stocks() — current_price/
+    pe_ratio/market_cap_cr/week52_high only, via fetch_price_only()
+    (see its docstring), merged in without touching P&L/EMA/quarters/
+    owned (see merge_price_only()). 2026-08-16 request: "2 refresh for
+    fundamental data & prices alone, as prices do need daily updates" —
+    fundamentals don't change day to day, so the once-a-day auto-refresh
+    (maybe_auto_refresh()) now calls THIS instead of the full
+    refresh_all_stocks(), which stays manual-only (its own "🔄 Refresh
+    all now" button on the Summary page) for updating P&L/quarterly/EMA.
+    Same pacing between tickers as the full refresh, for the same
+    rate-limit reason — roughly half the requests per ticker here, but
+    still worth not bursting across many tickers at once."""
+    raw = load_raw_all_stocks()
+    tickers = list(raw.keys())
+    if not tickers:
+        return 0
+    progress = st.progress(0.0, text="Refreshing prices…") if show_progress else None
+    for i, t in enumerate(tickers):
+        if i > 0:
+            time.sleep(0.4)
+        data, err = fetch_price_only(t, session_id)
+        if not err:
+            raw[t] = merge_price_only(raw.get(t), data)
+        if progress:
+            progress.progress((i + 1) / len(tickers), text=f"Refreshed {t}")
+    save_all_stocks(raw)
+    if progress:
+        progress.empty()
+    return len(tickers)
+
+
 def maybe_auto_refresh():
     """Once per calendar day, silently refreshes every tracked ticker's
-    price/P&L the first time the app is opened that day — no button
-    click needed, no growth/PE inputs required. The "day is done" flag
-    (data/last_refresh.json) is GitHub-synced like everything else, so
-    whichever device happens to open the app first each day satisfies
-    it for every device, not just that one.
+    PRICE the first time the app is opened that day — no button click
+    needed, no growth/PE inputs required. Price-only (2026-08-16, "2
+    refresh for fundamental data & prices alone, as prices do need daily
+    updates") — fundamentals (annual P&L, Quarterly Results, EMAs) don't
+    change day to day, so running the full fetch_one() here daily was
+    wasted load (and the extra EMA chart-API requests are the confirmed
+    source of transient failures under bulk load, see
+    fetch_price_series()'s retry). Full fundamentals refresh is now
+    manual-only, via the Summary page's own "🔄 Refresh all now" button.
+
+    The "day is done" flag (data/last_refresh.json) is GitHub-synced
+    like everything else, so whichever device happens to open the app
+    first each day satisfies it for every device, not just that one.
 
     Blocking: this runs synchronously before the page renders, so the
-    first visitor of the day waits on N sequential Screener.in fetches.
+    first visitor of the day waits on N sequential Screener.in fetches
+    (roughly half of what the old full-refresh version cost, per ticker).
     Fine for a personal watchlist of a handful of tickers; would need
     revisiting (e.g. a real scheduler) if the tracked list grows large.
 
@@ -949,15 +1122,15 @@ def maybe_auto_refresh():
 
     raw = load_raw_all_stocks()
     if raw:
-        with st.spinner(f"Refreshing {len(raw)} tracked companies for today…"):
-            n = refresh_all_stocks(session_id, show_progress=False)
+        with st.spinner(f"Refreshing prices for {len(raw)} tracked companies today…"):
+            n = refresh_prices_only(session_id, show_progress=False)
         if n:
-            st.toast(f"🔄 Auto-refreshed {n} companies for {today}")
+            st.toast(f"💹 Auto-refreshed prices for {n} companies for {today}")
     save_last_refresh({"date": today})
 
 
 def render_stock_section(stocks, scenarios, section_key, empty_msg):
-    """One sortable table — Company/Price/PE/EMA%/Base/Bull/Bear/Own/🗑️ —
+    """One sortable table — Company/Price/PE/Qtr Sales Gr%/EMA%/Base/Bull/Bear/Own/🗑️ —
     for a pre-filtered subset of all_stocks. Factored out of page_summary
     (2026-08-16, "divide the summary to 2 parts, stocks I own and other
     as tracking") so it can render twice, once per section, without
@@ -976,9 +1149,15 @@ def render_stock_section(stocks, scenarios, section_key, empty_msg):
     # trade-off, 2026-08-16, over a second data source like yfinance that
     # has no coverage for SME/small-cap names this app otherwise supports).
     EMA_COLS = [("ema20d", "20D"), ("ema50d", "50D"), ("ema33w", "33W")]
-    col_widths = [2.2, 0.8, 0.6] + [0.5] * len(EMA_COLS) + [1.05, 1.05, 1.05, 0.5, 0.55]
+    # Qtr Sales Gr% inserted after P/E (2026-08-16, "since there is lot of
+    # space in summary header... can we add latest quarterly sales
+    # growth%") — latest-quarter YoY, the last entry of q_revenue_growth_pct
+    # (oldest-to-newest, same order as "quarters"; see screener_fetch.py).
+    # None for companies not yet refreshed since Quarterly Results shipped.
+    ema_start = 4
+    col_widths = [2.2, 0.8, 0.6, 0.75] + [0.5] * len(EMA_COLS) + [1.05, 1.05, 1.05, 0.5, 0.55]
     n_ema_cols = len(EMA_COLS)
-    case_start = 3 + n_ema_cols
+    case_start = ema_start + n_ema_cols
     n_case_cols = len(GRID_CASES)
     own_col = case_start + n_case_cols
     remove_col = own_col + 1
@@ -999,8 +1178,13 @@ def render_stock_section(stocks, scenarios, section_key, empty_msg):
             h = headline_cagr(stock, get_case_state(scenarios, stock, ticker, case))
             case_headline[case] = h
             case_cagr[case] = h["cagr"] if h and h["cagr"] is not None else None
-        rows.append({"ticker": ticker, "stock": stock, "price": price,
-                      "pe": stock.get("pe_ratio"), "case_headline": case_headline, "case_cagr": case_cagr})
+        q_growth = stock.get("q_revenue_growth_pct")
+        q_labels = stock.get("quarters")
+        qtr_sales_g = q_growth[-1] if q_growth else None
+        qtr_sales_label = q_labels[-1] if q_labels else None
+        rows.append({"ticker": ticker, "stock": stock, "price": price, "pe": stock.get("pe_ratio"),
+                      "case_headline": case_headline, "case_cagr": case_cagr,
+                      "qtr_sales_g": qtr_sales_g, "qtr_sales_label": qtr_sales_label})
 
     def sort_value(row, col):
         if col == "name":
@@ -1009,6 +1193,8 @@ def render_stock_section(stocks, scenarios, section_key, empty_msg):
             return row["price"]
         if col == "pe":
             return row["pe"]
+        if col == "qtr_sales_g":
+            return row["qtr_sales_g"]
         if col.startswith("ema_"):
             ema_key = col[len("ema_"):]
             ema_val = row["stock"].get(ema_key)
@@ -1029,26 +1215,43 @@ def render_stock_section(stocks, scenarios, section_key, empty_msg):
             return label
         return f"{label} {'▼' if sort_dir == 'desc' else '▲'}"
 
+    def sort_arrow_html():
+        return (f'<div style="text-align:center;font-size:9px;line-height:1;margin-top:-4px;'
+                f'color:var(--vl-accent);">{"▼" if sort_dir == "desc" else "▲"}</div>')
+
     # Column id, display label, center-aligned (matches its value below).
     # Base/Bull/Bear centered too (2026-08-16 fix) — case_summary_cell_html
     # centers its FY-year/EPS-growth-PE-CAGR line, so a left-aligned
     # header above it had the same header/value mismatch already fixed
     # once for the EMA columns.
-    header_defs = ([("name", "Company", False), ("price", "Price", False), ("pe", "P/E", False)]
+    header_defs = ([("name", "Company", False), ("price", "Price", False), ("pe", "P/E", False),
+                     ("qtr_sales_g", "Qtr Sales Gr%", True)]
                     + [(f"ema_{k}", lbl, True) for k, lbl in EMA_COLS]
                     + [(c, CASE_LABEL[c].replace(" Case", ""), True) for c in GRID_CASES])
 
     # Header buttons reuse the existing tertiary "link text" styling (see
     # inject_css()'s button[kind="tertiary"] rule) instead of new CSS —
     # clicking toggles asc/desc on the same column, or switches to a new
-    # one at asc. use_container_width only on the EMA columns so their
-    # (already-centered) button text lines up with ema_pct_html below;
-    # the rest stay left-aligned, sized to their own text, like before.
+    # one at asc. use_container_width only on the EMA/Qtr-Sales-Gr%/case
+    # columns so their (already-centered) button text lines up with the
+    # centered value below; the rest stay left-aligned, sized to their
+    # own text, like before.
+    #
+    # Centered columns' sort arrow is a SEPARATE small line under the
+    # button (sort_arrow_html()), not appended to the label text itself
+    # (header_text() — still used as-is for the left-aligned columns,
+    # where this doesn't matter). 2026-08-16, "again indent issue":
+    # appending " ▼" onto a centered label lengthens the string on one
+    # side only, so the whole button+label block still measures
+    # perfectly centered (verified: 0px offset from the value below) but
+    # visually reads as shifted left — the arrow's one-sided weight
+    # throws off the eye even though the box-model centering is correct.
     with st.container(key=f"vl_summary_header_{section_key}"):
         header = st.columns(col_widths)
         for i, (col_id, label, centered) in enumerate(header_defs):
             with header[i]:
-                if st.button(header_text(col_id, label), key=f"{section_key}_sort_{col_id}", type="tertiary",
+                btn_label = label if centered else header_text(col_id, label)
+                if st.button(btn_label, key=f"{section_key}_sort_{col_id}", type="tertiary",
                              use_container_width=centered):
                     if sort_col == col_id:
                         st.session_state[sort_dir_key] = "desc" if sort_dir == "asc" else "asc"
@@ -1056,6 +1259,8 @@ def render_stock_section(stocks, scenarios, section_key, empty_msg):
                         st.session_state[sort_col_key] = col_id
                         st.session_state[sort_dir_key] = "asc"
                     st.rerun()
+                if centered and col_id == sort_col:
+                    st.markdown(sort_arrow_html(), unsafe_allow_html=True)
         header[own_col].markdown('<div style="text-align:center;font-size:11px;color:var(--vl-faint);">Own</div>',
                                   unsafe_allow_html=True)
         header[remove_col].write("")  # Remove column — no header, not sortable
@@ -1063,7 +1268,12 @@ def render_stock_section(stocks, scenarios, section_key, empty_msg):
 
     for row in rows:
         ticker, stock = row["ticker"], row["stock"]
-        cols = st.columns(col_widths)
+        # vertical_alignment="center" (2026-08-16 — reverted from a
+        # "bottom" + hidden-spacer-line approach that turned out to look
+        # worse in practice than intended, per direct feedback: "not good
+        # looking, lets revert back to indent center on column level for
+        # each cell"). Simple per-cell centering, no extra markup needed.
+        cols = st.columns(col_widths, vertical_alignment="center")
         # Name itself opens the Detail page (replaces the old standalone 🔍
         # icon column, 2026-08-15) — styled via the tertiary-button CSS
         # above to read as a link, not a button.
@@ -1075,8 +1285,9 @@ def render_stock_section(stocks, scenarios, section_key, empty_msg):
                           unsafe_allow_html=True)
         cols[1].write(f"₹{fmt(row['price'])}")
         cols[2].write(f"{fmt(row['pe'], 1)}x")
+        cols[3].markdown(qtr_sales_growth_html(row["qtr_sales_label"], row["qtr_sales_g"]), unsafe_allow_html=True)
         for i, (ema_key, _) in enumerate(EMA_COLS):
-            cols[3 + i].markdown(ema_pct_html(row["price"], stock.get(ema_key)), unsafe_allow_html=True)
+            cols[ema_start + i].markdown(ema_pct_html(row["price"], stock.get(ema_key)), unsafe_allow_html=True)
         for i, case in enumerate(GRID_CASES):
             cols[case_start + i].markdown(case_summary_cell_html(row["case_headline"][case]),
                                            unsafe_allow_html=True)
@@ -1113,10 +1324,23 @@ def page_summary(all_stocks, scenarios):
                     unsafe_allow_html=True)
         return
 
-    if st.button("🔄 Refresh all now", help="Re-fetches every company below from Screener.in live"):
-        n = refresh_all_stocks(get_session_id())
-        st.success(f"Refreshed {n} companies.")
-        st.rerun()
+    # Two separate refresh actions (2026-08-16, "2 refresh for
+    # fundamental data & prices alone, as prices do need daily updates")
+    # — Prices is the fast/cheap one (~half the requests per company,
+    # see fetch_price_only()) for something that's genuinely stale by
+    # the next trading session; Fundamentals (P&L/Quarterly Results/EMA)
+    # doesn't change day to day so it stays a deliberate, separate action.
+    refresh_col1, refresh_col2 = st.columns([1, 1])
+    with refresh_col1:
+        if st.button("💹 Refresh prices only", help="Fast — price/PE/market cap/52W high only, no P&L/quarterly/EMA"):
+            n = refresh_prices_only(get_session_id())
+            st.success(f"Refreshed prices for {n} companies.")
+            st.rerun()
+    with refresh_col2:
+        if st.button("🔄 Refresh all now", help="Full refresh — re-fetches P&L, Quarterly Results, and EMAs too (slower)"):
+            n = refresh_all_stocks(get_session_id())
+            st.success(f"Refreshed {n} companies.")
+            st.rerun()
 
     # Split into two independently-sortable tables (2026-08-16, "divide
     # the summary to 2 parts, stocks I own and other as tracking") —
@@ -1360,9 +1584,53 @@ def page_guidance_tracker(all_stocks):
 # ───────────────────────── Detail page (fundamentals) ─────────────────────────
 
 def page_detail(stock, ticker, scenarios):
-    if st.button("← Back to Summary"):
-        st.session_state["_jump_to"] = None
-        st.rerun()
+    # Slim sticky header (2026-08-16 request: "static header on scrolling
+    # down... just like screener") — Screener pins a compact name+price
+    # bar once you scroll past the full header; this stays pinned from
+    # the start instead (simpler, no scroll-position JS needed, and still
+    # answers the actual need: which company/price you're looking at
+    # stays visible no matter how far down the page — annual table,
+    # quarterly table, projections grid — you've scrolled). Separate from
+    # the full subheader+stat row below, which stays as normal (non-
+    # sticky) page content; duplicating the full 4-stat row here would
+    # make the pinned bar too tall, unlike Screener's own slim version.
+    #
+    # Rendered FIRST, before anything else — the bar is position:fixed
+    # (out of flow) so it always overlays whatever's underneath in that
+    # viewport region regardless of DOM order; the only fix is making
+    # sure nothing else renders ABOVE this point that would end up
+    # hidden under it (confirmed earlier: with this below the Back
+    # button, the spacer couldn't retroactively push the button down —
+    # it had already been placed higher up before the bar/spacer ever
+    # entered the page).
+    st.markdown(
+        f'<div class="vl-sticky-header">'
+        f'<span class="vl-sticky-name">{stock["name"]} <span class="vl-sub">({ticker})</span></span>'
+        f'<span class="vl-sticky-detail">'
+        f'<span class="vl-sticky-sep">·</span>₹{fmt(stock.get("current_price"))}'
+        f'<span class="vl-sticky-sep">·</span>PE {fmt(stock.get("pe_ratio"), 1)}x</span>'
+        f'</div>'
+        # Spacer — the bar above is position:fixed (out of flow), so
+        # without this the page's own content renders right under
+        # Streamlit's toolbar and the fixed bar just overlaps on top of
+        # it. Height matches the bar's own rendered height (measured
+        # live at the current 28px/H3 name size: ~58px; 64px leaves a
+        # hair of margin) — shrunk alongside the "reduce font size"
+        # follow-up request from the taller H1-sized version's 96px.
+        f'<div style="height:64px;"></div>',
+        unsafe_allow_html=True)
+
+    # Back button folded into the sticky bar itself (2026-08-16, "back to
+    # summary now to be added to static header") — a real st.button (not
+    # part of the markdown above, which is plain HTML with no Python
+    # callback) fixed-positioned over the bar's own reserved left margin
+    # via the keyed container's CSS (.st-key-vl_sticky_back_btn), so it
+    # visually reads as part of the header despite being a separate
+    # Streamlit element underneath in the DOM.
+    with st.container(key="vl_sticky_back_btn"):
+        if st.button("← Back to Summary"):
+            st.session_state["_jump_to"] = None
+            st.rerun()
 
     st.subheader(f"{stock['name']} ({ticker})")
     render_stat_row([
@@ -1438,6 +1706,47 @@ def page_detail(stock, ticker, scenarios):
     hist_row("PAT Growth %", stock["pat_growth_pct"], 1, "%", colorize=True)
     hist_row("Number of Shares Cr", stock["shares_cr"], 3)
     hist_row("EPS ₹", stock["eps"], 2, bold=True)
+
+    # Quarterly Results (2026-08-16 request: "can we also pull in
+    # quarterly results") — same table shape as the annual one above, just
+    # quarter-labeled columns; growth% is YoY (same-quarter-prior-year,
+    # date-matched — see screener_fetch.py's module docstring for why not
+    # a fixed -4 offset), not QoQ, to avoid seasonal noise. Missing
+    # entirely (old cached fetch from before this existed, or the section
+    # wasn't found/parseable for this company) degrades to just not
+    # showing the table — same best-effort posture as EMAs.
+    if stock.get("quarters"):
+        st.divider()
+        st.caption(f"Fundamentals (Screener.in, {basis}) — Quarterly Results "
+                   f"(last {len(stock['quarters'])} quarters)")
+        nq = len(stock["quarters"])
+        q_col_widths = [2.2] + [1] * nq
+
+        def q_row(label, vals, digits=0, suffix="", colorize=False, bold=False):
+            cols = st.columns(q_col_widths)
+            cols[0].markdown(("**" + label + "**") if bold else label)
+            for j, v in enumerate(vals):
+                cols[1 + j].markdown(hist_cell_html(v, digits, suffix, colorize, bold), unsafe_allow_html=True)
+
+        qhdr = st.columns(q_col_widths)
+        qhdr[0].markdown("**Quarter**")
+        for j, q in enumerate(stock["quarters"]):
+            qhdr[1 + j].markdown(f"<div style='text-align:right;color:var(--vl-faint);font-size:11px;'>{q}</div>",
+                                  unsafe_allow_html=True)
+
+        q_row("Sales Cr", stock.get("q_revenue", []), bold=True)
+        q_row("Sales Growth % (YoY)", stock.get("q_revenue_growth_pct", []), 1, "%", colorize=True)
+        q_row("Expenses Cr", stock.get("q_expenses", []))
+        q_row("Operating Profit Cr", stock.get("q_operating_profit", []), bold=True)
+        q_row("OPM %", stock.get("q_opm_pct", []), 1, "%", colorize=True)
+        q_row("Other Income Cr", stock.get("q_other_income", []))
+        q_row("Interest Expense Cr", stock.get("q_interest", []))
+        q_row("Depreciation Cr", stock.get("q_depreciation", []))
+        q_row("PBT Cr", stock.get("q_pbt", []), bold=True)
+        q_row("Tax %", stock.get("q_tax_pct", []), 1, "%")
+        q_row("Net Profit Cr", stock.get("q_net_profit", []), bold=True)
+        q_row("PAT Growth % (YoY)", stock.get("q_pat_growth_pct", []), 1, "%", colorize=True)
+        q_row("EPS ₹", stock.get("q_eps", []), 2, bold=True)
 
     st.divider()
     render_projections_grid(stock, ticker, scenarios)
@@ -1721,7 +2030,15 @@ def main():
     jump_to = st.session_state.get("_jump_to")
 
     if jump_to and jump_to in all_stocks:
-        st.title("🧮 Valuation Ledger")
+        # No "🧮 Valuation Ledger" app-brand title here (unlike the other
+        # two branches below) — 2026-08-16: once the sticky header got
+        # bumped to H1 size, this title rendered right underneath it and
+        # got covered regardless of any spacer, since the sticky bar is
+        # position:fixed and always overlays whatever's in that viewport
+        # region no matter how page_detail()'s own content is padded.
+        # Redundant anyway now — the sticky bar already carries the
+        # company name permanently, and page_detail() has its own
+        # subheader with the same name+ticker right below it.
         page_detail(all_stocks[jump_to], jump_to, scenarios)
         return
 
