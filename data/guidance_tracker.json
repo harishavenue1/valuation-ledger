@@ -4,7 +4,8 @@
     "Quarter 2",
     "Quarter 3",
     "Quarter 4",
-    "Quarter 5"
+    "Quarter 5",
+    "Quarter 6"
   ],
   "tracked": [
     "VENUSREM"
@@ -24,6 +25,10 @@
         "tag": ""
       },
       "Quarter 4": {
+        "note": "",
+        "tag": ""
+      },
+      "Quarter 5": {
         "note": "",
         "tag": ""
       }
