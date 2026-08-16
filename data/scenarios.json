@@ -870,5 +870,42 @@
       ],
       "assumptions": ""
     }
+  },
+  "SIGMAADV": {
+    "bull": {
+      "drivers": [
+        {
+          "revGrowth": 40.0,
+          "opm": 10.0,
+          "tax": 11.0,
+          "other_income": 285.0,
+          "interest": 20.0,
+          "depreciation": 14.0,
+          "shares": 17.62,
+          "pe": 40.0
+        },
+        {
+          "revGrowth": 25.0,
+          "opm": 10.0,
+          "tax": 11.0,
+          "other_income": 285.0,
+          "interest": 20.0,
+          "depreciation": 14.0,
+          "shares": 17.62,
+          "pe": 25.0
+        },
+        {
+          "revGrowth": 25.0,
+          "opm": 10.0,
+          "tax": 11.0,
+          "other_income": 285.0,
+          "interest": 20.0,
+          "depreciation": 14.0,
+          "shares": 17.62,
+          "pe": 25.0
+        }
+      ],
+      "assumptions": ""
+    }
   }
 }
