@@ -1267,8 +1267,12 @@ def render_stock_section(stocks, scenarios, section_key, empty_msg):
     # that target" number a user actually scans first; this reuses
     # headline_cagr()'s already-computed share_price, no new fetching
     # needed).
-    ema_start = 5
-    col_widths = [2.2, 0.8, 0.6, 0.85, 0.75] + [0.5] * len(EMA_COLS) + [1.05, 1.05, 1.05, 0.5, 0.55]
+    # Market Cap first data column, ahead of Price (2026-08-16, "next to
+    # price" then "make market cap as 1st column" — already fetched
+    # (top-ratios' "Market Cap", same field the Detail page's stat row
+    # already shows), so this is display-only, no new fetching.
+    ema_start = 6
+    col_widths = [2.2, 0.9, 0.8, 0.6, 0.85, 0.75] + [0.5] * len(EMA_COLS) + [1.05, 1.05, 1.05, 0.5, 0.55]
     n_ema_cols = len(EMA_COLS)
     case_start = ema_start + n_ema_cols
     n_case_cols = len(GRID_CASES)
@@ -1313,6 +1317,8 @@ def render_stock_section(stocks, scenarios, section_key, empty_msg):
             return row["stock"]["name"].lower()
         if col == "price":
             return row["price"]
+        if col == "mktcap":
+            return row["stock"].get("market_cap_cr")
         if col == "pe":
             return row["pe"]
         if col == "qtr_sales_g":
@@ -1355,8 +1361,8 @@ def render_stock_section(stocks, scenarios, section_key, empty_msg):
     # centers its FY-year/EPS-growth-PE-CAGR line, so a left-aligned
     # header above it had the same header/value mismatch already fixed
     # once for the EMA columns.
-    header_defs = ([("name", "Company", False), ("price", "Price", True), ("pe", "P/E", True),
-                     ("upside", "Upside", True), ("qtr_sales_g", "Qtr Sales Gr%", True)]
+    header_defs = ([("name", "Company", False), ("mktcap", "Mkt Cap", True), ("price", "Price", True),
+                     ("pe", "P/E", True), ("upside", "Upside", True), ("qtr_sales_g", "Qtr Sales Gr%", True)]
                     + [(f"ema_{k}", lbl, True) for k, lbl in EMA_COLS]
                     + [(c, CASE_LABEL[c].replace(" Case", ""), True) for c in GRID_CASES])
 
@@ -1422,10 +1428,12 @@ def render_stock_section(stocks, scenarios, section_key, empty_msg):
         # 16px everywhere (verified), but Price/P/E's left-hugging text
         # against neighboring centered columns read as ragged/uneven
         # whitespace even though the grid itself was consistent).
-        cols[1].markdown(f'<div style="text-align:center;">₹{fmt(row["price"])}</div>', unsafe_allow_html=True)
-        cols[2].markdown(f'<div style="text-align:center;">{fmt(row["pe"], 1)}x</div>', unsafe_allow_html=True)
-        cols[3].markdown(pct_value_html(row["upside"]), unsafe_allow_html=True)
-        cols[4].markdown(qtr_sales_growth_html(row["qtr_sales_label"], row["qtr_sales_g"]), unsafe_allow_html=True)
+        cols[1].markdown(f'<div style="text-align:center;">₹{fmt(stock.get("market_cap_cr"))} Cr</div>',
+                          unsafe_allow_html=True)
+        cols[2].markdown(f'<div style="text-align:center;">₹{fmt(row["price"])}</div>', unsafe_allow_html=True)
+        cols[3].markdown(f'<div style="text-align:center;">{fmt(row["pe"], 1)}x</div>', unsafe_allow_html=True)
+        cols[4].markdown(pct_value_html(row["upside"]), unsafe_allow_html=True)
+        cols[5].markdown(qtr_sales_growth_html(row["qtr_sales_label"], row["qtr_sales_g"]), unsafe_allow_html=True)
         for i, (ema_key, _) in enumerate(EMA_COLS):
             cols[ema_start + i].markdown(ema_pct_html(row["price"], stock.get(ema_key)), unsafe_allow_html=True)
         for i, case in enumerate(GRID_CASES):
