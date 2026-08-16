@@ -1034,7 +1034,22 @@ def refresh_all_stocks(session_id, show_progress=True):
     also GitHub-syncs, see save_all_stocks). Shared by the manual
     "Refresh all now" button and the once-a-day auto-trigger in
     maybe_auto_refresh() — same code path either way. Returns the count
-    refreshed."""
+    refreshed.
+
+    Saves per-ticker, not once at the end (2026-08-16 fix — the
+    original load-once/loop/save-once-at-the-end shape held one
+    in-memory snapshot for the whole loop's duration, tens of seconds
+    for a full watchlist; any OTHER concurrent write in that window
+    (e.g. the Detail page's single-company "Refresh X now") got
+    silently lost when this loop's stale snapshot saved back over it at
+    the end — confirmed live: a field freshly written by a single-
+    company refresh vanished a minute later when a slower bulk refresh,
+    already mid-loop on a snapshot taken before that write happened,
+    finished and saved its own stale copy back over it. Re-loading
+    fresh right before each per-ticker merge shrinks that race window
+    from "whole loop" to "one ticker", which is as
+    good as this plain-JSON-file storage can offer short of a real
+    lock/DB)."""
     raw = load_raw_all_stocks()
     tickers = list(raw.keys())
     if not tickers:
@@ -1054,10 +1069,11 @@ def refresh_all_stocks(session_id, show_progress=True):
             time.sleep(0.4)
         data, err = fetch_one(t, session_id)
         if not err:
-            raw[t] = merge_fetched(raw.get(t), data)
+            current = load_raw_all_stocks()
+            current[t] = merge_fetched(current.get(t), data)
+            save_all_stocks(current)
         if progress:
             progress.progress((i + 1) / len(tickers), text=f"Refreshed {t}")
-    save_all_stocks(raw)
     if progress:
         progress.empty()
     return len(tickers)
@@ -1075,7 +1091,10 @@ def refresh_prices_only(session_id, show_progress=True):
     all now" button on the Summary page) for updating P&L/quarterly/EMA.
     Same pacing between tickers as the full refresh, for the same
     rate-limit reason — roughly half the requests per ticker here, but
-    still worth not bursting across many tickers at once."""
+    still worth not bursting across many tickers at once.
+
+    Saves per-ticker, not once at the end — same race-condition fix as
+    refresh_all_stocks(), see its docstring for the full story."""
     raw = load_raw_all_stocks()
     tickers = list(raw.keys())
     if not tickers:
@@ -1086,10 +1105,11 @@ def refresh_prices_only(session_id, show_progress=True):
             time.sleep(0.4)
         data, err = fetch_price_only(t, session_id)
         if not err:
-            raw[t] = merge_price_only(raw.get(t), data)
+            current = load_raw_all_stocks()
+            current[t] = merge_price_only(current.get(t), data)
+            save_all_stocks(current)
         if progress:
             progress.progress((i + 1) / len(tickers), text=f"Refreshed {t}")
-    save_all_stocks(raw)
     if progress:
         progress.empty()
     return len(tickers)
@@ -1112,10 +1132,15 @@ def retrieve_companies(ticker_input, session_id):
     ticker fetch+save+track logic before this, now just call this once.
 
     Returns (successes, failures): successes is a list of fetched data
-    dicts, failures a list of (typed_ticker, error_message) tuples."""
+    dicts, failures a list of (typed_ticker, error_message) tuples.
+
+    Saves per-ticker, not once at the end — same race-condition fix as
+    refresh_all_stocks() (see its docstring): a bulk refresh running
+    concurrently could otherwise clobber a newly-added company here, or
+    vice versa, since both would otherwise hold a stale whole-file
+    snapshot for their own loop's duration."""
     tickers = [t.strip() for t in ticker_input.split(",") if t.strip()]
     successes, failures = [], []
-    raw = load_raw_all_stocks()
     tracker = load_guidance_tracker()
     tracked = tracker.setdefault("tracked", [])
     for i, t in enumerate(tickers):
@@ -1125,11 +1150,12 @@ def retrieve_companies(ticker_input, session_id):
         if err:
             failures.append((t, err))
             continue
+        raw = load_raw_all_stocks()
         raw[data["ticker"]] = merge_fetched(raw.get(data["ticker"]), data)
+        save_all_stocks(raw)
         if data["ticker"] not in tracked:
             tracked.append(data["ticker"])
         successes.append(data)
-    save_all_stocks(raw)
     if successes:
         save_guidance_tracker(tracker)
     return successes, failures
