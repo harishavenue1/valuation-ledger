@@ -3120,7 +3120,8 @@
       45.9,
       27.38
     ],
-    "fetched_at": "2026-08-16 13:37:07"
+    "fetched_at": "2026-08-16 13:37:07",
+    "owned": true
   },
   "SIGMAADV": {
     "ticker": "SIGMAADV",
