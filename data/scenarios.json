@@ -833,5 +833,42 @@
       ],
       "assumptions": ""
     }
+  },
+  "DIVGIITTS": {
+    "bull": {
+      "drivers": [
+        {
+          "revGrowth": 40.0,
+          "opm": 20.0,
+          "tax": 25.0,
+          "other_income": 22.0,
+          "interest": 0.0,
+          "depreciation": 29.0,
+          "shares": 3.062,
+          "pe": 40.0
+        },
+        {
+          "revGrowth": 25.0,
+          "opm": 20.0,
+          "tax": 25.0,
+          "other_income": 22.0,
+          "interest": 0.0,
+          "depreciation": 29.0,
+          "shares": 3.062,
+          "pe": 25.0
+        },
+        {
+          "revGrowth": 25.0,
+          "opm": 20.0,
+          "tax": 25.0,
+          "other_income": 22.0,
+          "interest": 0.0,
+          "depreciation": 29.0,
+          "shares": 3.062,
+          "pe": 25.0
+        }
+      ],
+      "assumptions": ""
+    }
   }
 }
