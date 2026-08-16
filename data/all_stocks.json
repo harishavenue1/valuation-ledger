@@ -3746,7 +3746,8 @@
       8.58,
       7.65
     ],
-    "fetched_at": "2026-08-16 13:38:02"
+    "fetched_at": "2026-08-16 13:38:02",
+    "owned": true
   },
   "ANLON": {
     "ticker": "ANLON",
