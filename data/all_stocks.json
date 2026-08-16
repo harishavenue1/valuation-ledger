@@ -236,7 +236,8 @@
       1.032,
       1.037
     ],
-    "fetched_at": "2026-08-16 09:27:15"
+    "fetched_at": "2026-08-16 10:23:39",
+    "owned": false
   },
   "VENUSREM": {
     "ticker": "VENUSREM",
@@ -475,7 +476,8 @@
       1.339,
       1.335
     ],
-    "fetched_at": "2026-08-16 09:27:18"
+    "fetched_at": "2026-08-16 10:23:42",
+    "owned": false
   },
   "544310": {
     "ticker": "544310",
@@ -624,7 +626,8 @@
       2.796,
       2.829
     ],
-    "fetched_at": "2026-08-16 09:27:22"
+    "fetched_at": "2026-08-16 10:23:46",
+    "owned": false
   },
   "ASTRAMICRO": {
     "ticker": "ASTRAMICRO",
@@ -863,7 +866,8 @@
       9.498,
       9.493
     ],
-    "fetched_at": "2026-08-16 09:27:36"
+    "fetched_at": "2026-08-16 10:23:49",
+    "owned": false
   },
   "STLTECH": {
     "ticker": "STLTECH",
@@ -1102,7 +1106,8 @@
       48.696,
       48.795
     ],
-    "fetched_at": "2026-08-16 09:28:53"
+    "fetched_at": "2026-08-16 10:23:52",
+    "owned": false
   },
   "HFCL": {
     "ticker": "HFCL",
@@ -1341,7 +1346,8 @@
       161.275,
       160.212
     ],
-    "fetched_at": "2026-08-16 09:29:35"
+    "fetched_at": "2026-08-16 10:23:56",
+    "owned": false
   },
   "APOLLO": {
     "ticker": "APOLLO",
@@ -1505,6 +1511,7 @@
       33.861,
       33.626
     ],
-    "fetched_at": "2026-08-16 09:45:49"
+    "fetched_at": "2026-08-16 10:23:59",
+    "owned": false
   }
 }
