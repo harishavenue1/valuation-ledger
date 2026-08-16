@@ -842,22 +842,18 @@ def inject_css():
       /* Slim icon buttons (the summary row's Remove) */
       div[data-testid="stHorizontalBlock"] button[kind="secondary"] { padding: 2px 10px; }
 
-      /* Summary table's Own checkbox — centered under its "Own" header
-       * (2026-08-16, "update indentation to Own column") instead of
-       * left-anchored in its column like every Streamlit checkbox
-       * defaults to. Only checkbox in the app, so :has() scoping to it
-       * is safe unscoped by a container key. Two ancestor levels up
-       * (stVerticalBlock, stElementContainer) turned out to be the real
-       * culprit, not stCheckbox itself — both shrink-wrap to the
-       * checkbox's own ~26px by default instead of filling stColumn's
-       * full ~76px, so centering stCheckbox alone had no extra space to
-       * center within (measured: still 25px off after that first pass;
-       * DOM walk found stColumn genuinely was 76px while everything
-       * inside it, including stCheckbox, was stuck at 26px). */
-      div[data-testid="stElementContainer"]:has(div[data-testid="stCheckbox"]) {
-        width: 100% !important; display: flex !important; justify-content: center !important; }
-      div[data-testid="stVerticalBlock"]:has(div[data-testid="stCheckbox"]) {
-        width: 100% !important; align-items: center !important; }
+      /* Own toggle — flatten the default bordered button box so the
+       * ✅/⬜ reads as a plain value like every other column (Bear, EMA,
+       * etc.) instead of a UI control (2026-08-16, "doesnt looks same
+       * as bear column format"). Scoped via the key-derived class
+       * Streamlit adds to the element container (st-key-<key>); "_own_"
+       * only ever appears in this button's own key, never Remove's or
+       * any other, so this can't leak onto other buttons. */
+      div[data-testid="stElementContainer"][class*="_own_"] button {
+        background: transparent !important; border: none !important;
+        box-shadow: none !important; padding: 2px 0 !important; font-size: 15px !important; }
+      div[data-testid="stElementContainer"][class*="_own_"] button:hover {
+        background: transparent !important; border: none !important; }
 
       /* Summary row's company name — a tertiary st.button styled to read
          as a link (opens that company's Detail page) rather than a button,
@@ -1009,12 +1005,17 @@ def qtr_sales_growth_html(quarter_label, pct):
 
 
 def hist_cell_html(v, digits, suffix, colorize, bold):
+    # font-size:15px (2026-08-16, matching the same bump applied to the
+    # Quarterly Results table's own q_cell_html — "add same way header to
+    # annual result as well") — this is the annual table's only
+    # remaining caller now that quarterly has its own cell renderer.
     text = fmt(v, digits, suffix)
     cls = ""
     if colorize and v is not None:
         cls = "vl-pos" if v >= 0 else "vl-neg"
     weight = "font-weight:700;" if bold else ""
-    span = f'<span class="{cls}" style="{weight}">{text}</span>' if cls else f'<span style="{weight}">{text}</span>'
+    span = (f'<span class="{cls}" style="font-size:15px;{weight}">{text}</span>' if cls
+            else f'<span style="font-size:15px;{weight}">{text}</span>')
     return f'<div style="text-align:right;">{span}</div>'
 
 
@@ -1084,6 +1085,46 @@ def refresh_prices_only(session_id, show_progress=True):
     if progress:
         progress.empty()
     return len(tickers)
+
+
+def retrieve_companies(ticker_input, session_id):
+    """Fetches every ticker in a comma-separated input string (2026-08-16
+    request: "can we put multiple companies together" — previously a
+    multi-ticker paste like "mtar, windlas, mcx, bbox" got sent to
+    Screener's search API as one literal string and failed outright:
+    "could not resolve 'MTAR, WINDLAS, MCX, BBOX'"). Saves each success
+    into all_stocks.json (merged via merge_fetched(), not overwritten)
+    and appends it to the Guidance Tracker's tracked list — same
+    behavior a single-ticker Retrieve/Add already had, just looped.
+    Small pacing delay between tickers, same rate-limit reasoning as
+    refresh_all_stocks()'s.
+
+    Shared by section_retrieve() (Summary page) and the Guidance
+    Tracker's own Add-company form — both had near-identical single-
+    ticker fetch+save+track logic before this, now just call this once.
+
+    Returns (successes, failures): successes is a list of fetched data
+    dicts, failures a list of (typed_ticker, error_message) tuples."""
+    tickers = [t.strip() for t in ticker_input.split(",") if t.strip()]
+    successes, failures = [], []
+    raw = load_raw_all_stocks()
+    tracker = load_guidance_tracker()
+    tracked = tracker.setdefault("tracked", [])
+    for i, t in enumerate(tickers):
+        if i > 0:
+            time.sleep(0.4)
+        data, err = fetch_one(t.upper(), session_id)
+        if err:
+            failures.append((t, err))
+            continue
+        raw[data["ticker"]] = merge_fetched(raw.get(data["ticker"]), data)
+        if data["ticker"] not in tracked:
+            tracked.append(data["ticker"])
+        successes.append(data)
+    save_all_stocks(raw)
+    if successes:
+        save_guidance_tracker(tracker)
+    return successes, failures
 
 
 def maybe_auto_refresh():
@@ -1211,13 +1252,20 @@ def render_stock_section(stocks, scenarios, section_key, empty_msg):
         rows = present + missing
 
     def header_text(col_id, label):
+        # Arrow appended inline, next to the label, for EVERY column
+        # (2026-08-16, "instead lets make sort icon to appear to next of
+        # text instead of below.. for all cols" — reverses the previous
+        # two passes, which first moved it to a separate centered line
+        # under centered columns only to fix a real visual-centering skew
+        # there, then made that consistent across all columns; this
+        # trades that back for inline placement everywhere per explicit
+        # request. If the centering skew on centered columns (Qtr Sales
+        # Gr%/EMA/Base/Bull/Bear — see the "again indent issue" fix
+        # history above) turns out to bother again, that's the fix to
+        # revisit.)
         if col_id != sort_col:
             return label
         return f"{label} {'▼' if sort_dir == 'desc' else '▲'}"
-
-    def sort_arrow_html():
-        return (f'<div style="text-align:center;font-size:9px;line-height:1;margin-top:-4px;'
-                f'color:var(--vl-accent);">{"▼" if sort_dir == "desc" else "▲"}</div>')
 
     # Column id, display label, center-aligned (matches its value below).
     # Base/Bull/Bear centered too (2026-08-16 fix) — case_summary_cell_html
@@ -1236,22 +1284,11 @@ def render_stock_section(stocks, scenarios, section_key, empty_msg):
     # columns so their (already-centered) button text lines up with the
     # centered value below; the rest stay left-aligned, sized to their
     # own text, like before.
-    #
-    # Centered columns' sort arrow is a SEPARATE small line under the
-    # button (sort_arrow_html()), not appended to the label text itself
-    # (header_text() — still used as-is for the left-aligned columns,
-    # where this doesn't matter). 2026-08-16, "again indent issue":
-    # appending " ▼" onto a centered label lengthens the string on one
-    # side only, so the whole button+label block still measures
-    # perfectly centered (verified: 0px offset from the value below) but
-    # visually reads as shifted left — the arrow's one-sided weight
-    # throws off the eye even though the box-model centering is correct.
     with st.container(key=f"vl_summary_header_{section_key}"):
         header = st.columns(col_widths)
         for i, (col_id, label, centered) in enumerate(header_defs):
             with header[i]:
-                btn_label = label if centered else header_text(col_id, label)
-                if st.button(btn_label, key=f"{section_key}_sort_{col_id}", type="tertiary",
+                if st.button(header_text(col_id, label), key=f"{section_key}_sort_{col_id}", type="tertiary",
                              use_container_width=centered):
                     if sort_col == col_id:
                         st.session_state[sort_dir_key] = "desc" if sort_dir == "asc" else "asc"
@@ -1259,10 +1296,13 @@ def render_stock_section(stocks, scenarios, section_key, empty_msg):
                         st.session_state[sort_col_key] = col_id
                         st.session_state[sort_dir_key] = "asc"
                     st.rerun()
-                if centered and col_id == sort_col:
-                    st.markdown(sort_arrow_html(), unsafe_allow_html=True)
-        header[own_col].markdown('<div style="text-align:center;font-size:11px;color:var(--vl-faint);">Own</div>',
-                                  unsafe_allow_html=True)
+        # Own is now a plain button column, same as Remove — no more
+        # checkbox to CSS-match, so this header is just centered text
+        # like every other non-sortable/simple header (2026-08-16,
+        # "better make it a column same as others columns").
+        header[own_col].markdown(
+            '<div style="text-align:center;font-size:11px;color:var(--vl-faint);">Own</div>',
+            unsafe_allow_html=True)
         header[remove_col].write("")  # Remove column — no header, not sortable
     st.markdown('<hr style="margin:2px 0 8px;border-color:var(--vl-border);">', unsafe_allow_html=True)
 
@@ -1291,19 +1331,26 @@ def render_stock_section(stocks, scenarios, section_key, empty_msg):
         for i, case in enumerate(GRID_CASES):
             cols[case_start + i].markdown(case_summary_cell_html(row["case_headline"][case]),
                                            unsafe_allow_html=True)
-        # Own checkbox — moves the row to the other section on next rerun
-        # (2026-08-16 request). Only writes back when it actually changed,
-        # same one-shot-then-rerun pattern as every other edit in this
-        # app; the checkbox's own key namespaces by section+ticker so a
-        # stale widget in the "wrong" section (from before a toggle moved
-        # this row) can't leak its value in.
-        with cols[own_col]:
-            owned_now = st.checkbox("Own", value=stock.get("owned", False),
-                                     key=f"{section_key}_own_{ticker}_cb", label_visibility="collapsed")
-        if owned_now != stock.get("owned", False):
+        # Own toggle — a plain button, not st.checkbox() (2026-08-16,
+        # "better make it a column same as others columns" — the
+        # checkbox's internal DOM structure needed increasingly elaborate
+        # CSS (:has() on ancestor containers, then matching the header's
+        # own centering method to it) and still measured "tilted right"
+        # on the user's actual browser despite pixel-perfect measurements
+        # here every time. The Remove button right next to it never had
+        # this problem, so this column now works exactly like that one —
+        # a plain st.button(use_container_width=True), which Streamlit
+        # centers natively with no custom CSS needed at all.
+        # Moves the row to the other section on next rerun, same as the
+        # checkbox did; key namespaces by section+ticker so a stale
+        # widget in the "wrong" section (from before a toggle moved this
+        # row) can't leak its value in.
+        owned = stock.get("owned", False)
+        if cols[own_col].button("✅" if owned else "⬜", key=f"{section_key}_own_{ticker}_btn",
+                                 help="Click to mark as owned/not owned", use_container_width=True):
             raw = load_raw_all_stocks()
             if ticker in raw:
-                raw[ticker]["owned"] = owned_now
+                raw[ticker]["owned"] = not owned
                 save_all_stocks(raw)
             st.rerun()
         if cols[remove_col].button("🗑️", key=f"{section_key}_remove_{ticker}",
@@ -1416,23 +1463,25 @@ def page_guidance_tracker(all_stocks):
             # this form's width got capped to match the header; full-width
             # rows top-to-bottom fit that width comfortably instead (same
             # fix already applied to the Retrieve form).
+            # Comma-separated multi-ticker support (2026-08-16, "can we
+            # put multiple companies together") — see
+            # retrieve_companies() for the actual fetch loop.
             new_ticker = st.text_input("Add a company to this tracker",
-                                        placeholder="e.g. TITAN, or a numeric BSE code for SME names").strip()
+                                        placeholder="e.g. TITAN, or MTAR, WINDLAS, MCX for several at once").strip()
             add_co_submitted = st.form_submit_button("Add", type="primary", use_container_width=True)
     if add_co_submitted and new_ticker:
         with st.spinner(f"Fetching {new_ticker} from Screener.in…"):
-            data, err = fetch_one(new_ticker.upper(), get_session_id())
-        if err:
-            st.error(f"Couldn't fetch **{new_ticker}**: {err}")
-        else:
-            raw = load_raw_all_stocks()
-            raw[data["ticker"]] = merge_fetched(raw.get(data["ticker"]), data)
-            save_all_stocks(raw)
-            if data["ticker"] not in tracked:
-                tracked.append(data["ticker"])
-                save_guidance_tracker(tracker)
-            st.success(f"Added **{data['name']}** ({data['ticker']}).")
+            successes, failures = retrieve_companies(new_ticker, get_session_id())
+        if successes:
+            names = ", ".join(f"{d['name']} ({d['ticker']})" for d in successes)
+            msg = f"✅ Added: {names}."
+            if failures:
+                msg += " ⚠️ Couldn't fetch: " + "; ".join(f"{t}: {err}" for t, err in failures)
+            st.toast(msg)  # persists across the rerun below, unlike st.success
             st.rerun()
+        else:
+            failed_desc = "; ".join(f"{t}: {err}" for t, err in failures)
+            st.error(f"Couldn't fetch: {failed_desc}")
     elif add_co_submitted:
         st.warning("Type a ticker or company name first.")
 
@@ -1689,7 +1738,11 @@ def page_detail(stock, ticker, scenarios):
     # started recently despite decades of standalone history), so this
     # varies stock to stock and the label needs to say which it got.
     basis = "consolidated" if stock.get("consolidated") else "standalone"
-    st.caption(f"Fundamentals (Screener.in, {basis}) — annual Profit & Loss")
+    # H2 + caption (2026-08-16, "add same way header to annual result as
+    # well" — matching Qtr Results' own st.header() + st.caption() pair,
+    # in place of the plain st.caption()-only line this used to be).
+    st.header("Annual Results")
+    st.caption(f"Screener.in, {basis} — annual Profit & Loss")
 
     n = len(stock["years"])
     hist_col_widths = [2.2] + [1] * n
@@ -1703,8 +1756,8 @@ def page_detail(stock, ticker, scenarios):
     hdr = st.columns(hist_col_widths)
     hdr[0].markdown("**Financial Year**")
     for j, y in enumerate(stock["years"]):
-        hdr[1 + j].markdown(f"<div style='text-align:right;color:var(--vl-faint);font-size:11px;'>{y}</div>",
-                             unsafe_allow_html=True)
+        hdr[1 + j].markdown(f"<div style='text-align:right;color:var(--vl-faint);font-size:13.5px;"
+                             f"font-weight:700;'>{y}</div>", unsafe_allow_html=True)
 
     hist_row("Revenue Cr", stock["revenue"], bold=True)
     hist_row("Revenue Growth %", stock["revenue_growth_pct"], 1, "%", colorize=True)
@@ -1731,22 +1784,41 @@ def page_detail(stock, ticker, scenarios):
     # showing the table — same best-effort posture as EMAs.
     if stock.get("quarters"):
         st.divider()
-        st.caption(f"Fundamentals (Screener.in, {basis}) — Quarterly Results "
-                   f"(last {len(stock['quarters'])} quarters)")
+        # H2 (2026-08-16, "add a mid page header H2 as Qtr Results") —
+        # st.header(), not the st.subheader() (H3) every other section
+        # label in this app uses, so this reads as a step up/more
+        # prominent than those, matching the same request's "font is
+        # very small, increase" for the rest of this table too.
+        st.header("Qtr Results")
+        st.caption(f"Screener.in, {basis} — last {len(stock['quarters'])} quarters")
         nq = len(stock["quarters"])
         q_col_widths = [2.2] + [1] * nq
+
+        def q_cell_html(v, digits, suffix, colorize, bold):
+            # Own (bigger) cell renderer, not hist_cell_html — that one's
+            # shared with the annual table above, which wasn't part of
+            # this "too small" complaint; sizing it up here only avoids
+            # quietly resizing the annual table along with it.
+            text = fmt(v, digits, suffix)
+            cls = ""
+            if colorize and v is not None:
+                cls = "vl-pos" if v >= 0 else "vl-neg"
+            weight = "font-weight:700;" if bold else ""
+            span = (f'<span class="{cls}" style="font-size:15px;{weight}">{text}</span>' if cls
+                    else f'<span style="font-size:15px;{weight}">{text}</span>')
+            return f'<div style="text-align:right;">{span}</div>'
 
         def q_row(label, vals, digits=0, suffix="", colorize=False, bold=False):
             cols = st.columns(q_col_widths)
             cols[0].markdown(("**" + label + "**") if bold else label)
             for j, v in enumerate(vals):
-                cols[1 + j].markdown(hist_cell_html(v, digits, suffix, colorize, bold), unsafe_allow_html=True)
+                cols[1 + j].markdown(q_cell_html(v, digits, suffix, colorize, bold), unsafe_allow_html=True)
 
         qhdr = st.columns(q_col_widths)
         qhdr[0].markdown("**Quarter**")
         for j, q in enumerate(stock["quarters"]):
-            qhdr[1 + j].markdown(f"<div style='text-align:right;color:var(--vl-faint);font-size:11px;'>{q}</div>",
-                                  unsafe_allow_html=True)
+            qhdr[1 + j].markdown(f"<div style='text-align:right;color:var(--vl-faint);font-size:13.5px;"
+                                  f"font-weight:700;'>{q}</div>", unsafe_allow_html=True)
 
         q_row("Sales Cr", stock.get("q_revenue", []), bold=True)
         q_row("Sales Growth % (YoY)", stock.get("q_revenue_growth_pct", []), 1, "%", colorize=True)
@@ -1991,41 +2063,47 @@ def section_retrieve(all_stocks):
             # column split wrapped "Retrieve" onto two lines once this
             # form moved into the narrow top-right column; full-width
             # rows top-to-bottom fit that width comfortably instead.
+            # Comma-separated multi-ticker support (2026-08-16, "can we
+            # put multiple companies together") — see
+            # retrieve_companies() for the actual fetch loop.
             new_ticker = st.text_input("NSE/BSE ticker or company name",
-                                        placeholder="e.g. TITAN, or a numeric BSE code for SME names").strip()
+                                        placeholder="e.g. TITAN, or MTAR, WINDLAS, MCX for several at once").strip()
             submitted = st.form_submit_button("Retrieve", type="primary", use_container_width=True)
 
     if submitted and new_ticker:
         with st.spinner(f"Fetching {new_ticker} from Screener.in…"):
-            data, err = fetch_one(new_ticker.upper(), get_session_id())
-        if err:
-            st.error(f"Couldn't fetch **{new_ticker}**: {err}")
-        else:
-            # Store under the *resolved canonical* ticker (data["ticker"]),
-            # not the raw typed text — free-text input can resolve to a
-            # different symbol/code than what was typed, and the storage
-            # key needs to be the real symbol for later refreshes to work.
-            raw = load_raw_all_stocks()
-            raw[data["ticker"]] = merge_fetched(raw.get(data["ticker"]), data)
-            save_all_stocks(raw)
-            # Also added to the Guidance Tracker's own row list (2026-08-16
-            # request: "if a company is added to summary screen, same
-            # should be available on management guidance tracker page
-            # also") — reverses the earlier "tracked list is deliberately
-            # separate" design (see load_guidance_tracker()'s docstring);
-            # a Retrieve here now mirrors exactly what that page's own Add
-            # a company form already does. Still one-directional by
-            # construction: removing a company from the tracker (its own
-            # 🗑️) doesn't touch this page's list, only the reverse.
-            tracker = load_guidance_tracker()
-            tracked = tracker.setdefault("tracked", [])
-            if data["ticker"] not in tracked:
-                tracked.append(data["ticker"])
-                save_guidance_tracker(tracker)
-            st.success(f"Retrieved **{data['name']}** ({data['ticker']}) — price ₹{fmt(data['current_price'])}, "
-                       f"PE {fmt(data['pe_ratio'], 1)}x.")
-            st.session_state["_jump_to"] = data["ticker"]
+            successes, failures = retrieve_companies(new_ticker, get_session_id())
+        # Also added to the Guidance Tracker's own row list (2026-08-16
+        # request: "if a company is added to summary screen, same should
+        # be available on management guidance tracker page also") —
+        # reverses the earlier "tracked list is deliberately separate"
+        # design (see load_guidance_tracker()'s docstring); handled
+        # inside retrieve_companies() now, same as before per-ticker.
+        # Still one-directional by construction: removing a company from
+        # the tracker (its own 🗑️) doesn't touch this page's list, only
+        # the reverse.
+        if successes:
+            names = ", ".join(f"{d['name']} ({d['ticker']})" for d in successes)
+            msg = f"✅ Retrieved: {names}."
+            if failures:
+                msg += " ⚠️ Couldn't fetch: " + "; ".join(f"{t}: {err}" for t, err in failures)
+            # st.toast, not st.success — this still reruns right after
+            # (to show the new companies in the table), and a plain
+            # st.success would vanish with nothing to show for it since
+            # it renders in the pass that's about to be discarded; a
+            # toast persists across the rerun the way the auto-refresh
+            # notification elsewhere in this file already relies on.
+            st.toast(msg)
+            # Only jump straight to the Detail page for the original
+            # single-ticker case (one company, no failures) — jumping
+            # anywhere specific doesn't make sense once multiple
+            # companies just got added at once.
+            if len(successes) == 1 and not failures:
+                st.session_state["_jump_to"] = successes[0]["ticker"]
             st.rerun()
+        else:
+            failed_desc = "; ".join(f"{t}: {err}" for t, err in failures)
+            st.error(f"Couldn't fetch: {failed_desc}")
     elif submitted:
         st.warning("Type a ticker or company name first.")
 
