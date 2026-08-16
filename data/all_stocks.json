@@ -5511,7 +5511,8 @@
       3.65,
       3.15
     ],
-    "fetched_at": "2026-08-16 14:24:33"
+    "fetched_at": "2026-08-16 14:24:33",
+    "owned": true
   },
   "BECTORFOOD": {
     "ticker": "BECTORFOOD",
