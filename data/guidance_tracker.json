@@ -11,7 +11,8 @@
   "tracked": [
     "VENUSREM",
     "544310",
-    "ASTRAMICRO"
+    "ASTRAMICRO",
+    "STLTECH"
   ],
   "cells": {
     "VENUSREM": {
@@ -61,6 +62,20 @@
         "note": "",
         "tag": ""
       },
+      "Q1 FY26": {
+        "note": "",
+        "tag": ""
+      },
+      "Quarter 2": {
+        "note": "",
+        "tag": ""
+      },
+      "Quarter 3": {
+        "note": "",
+        "tag": ""
+      }
+    },
+    "ASTRAMICRO": {
       "Q1 FY26": {
         "note": "",
         "tag": ""
