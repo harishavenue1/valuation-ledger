@@ -611,5 +611,42 @@
       ],
       "assumptions": ""
     }
+  },
+  "APOLLO": {
+    "bull": {
+      "drivers": [
+        {
+          "revGrowth": 40.0,
+          "opm": 24.0,
+          "tax": 31.0,
+          "other_income": 6.0,
+          "interest": 47.0,
+          "depreciation": 22.0,
+          "shares": 33.861,
+          "pe": 40.0
+        },
+        {
+          "revGrowth": 25.0,
+          "opm": 24.0,
+          "tax": 31.0,
+          "other_income": 6.0,
+          "interest": 47.0,
+          "depreciation": 22.0,
+          "shares": 33.861,
+          "pe": 25.0
+        },
+        {
+          "revGrowth": 25.0,
+          "opm": 24.0,
+          "tax": 31.0,
+          "other_income": 6.0,
+          "interest": 47.0,
+          "depreciation": 22.0,
+          "shares": 33.861,
+          "pe": 25.0
+        }
+      ],
+      "assumptions": ""
+    }
   }
 }
