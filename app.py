@@ -846,6 +846,12 @@ def inject_css():
       .st-key-vl_gt_add_company { max-width: 480px; }
       .st-key-vl_gt_nav div[data-testid="stHorizontalBlock"] > div:last-child {
         display: flex !important; justify-content: flex-end !important; }
+      /* Summary page's search/filter box (2026-08-16 request, then
+       * "reduce width... to match the field above" — matched to the
+       * "Retrieve from Screener" ticker input's own rendered width,
+       * ~237px measured, 240px leaves a hair of margin like the other
+       * width-matched inputs on this page). */
+      .st-key-vl_summary_search { max-width: 240px; margin-bottom: 8px; }
 
       /* Slim icon buttons (the summary row's Remove) */
       div[data-testid="stHorizontalBlock"] button[kind="secondary"] { padding: 2px 10px; }
@@ -1469,47 +1475,29 @@ def render_stock_section(stocks, scenarios, section_key, empty_msg):
             st.rerun()
 
 
-def page_summary(all_stocks, scenarios):
+def page_summary(all_stocks, scenarios, search_query=""):
+    """Action buttons (Guidance Tracker / Refresh prices / Refresh all)
+    and the search box are rendered by main() now, not here (2026-08-16,
+    "place search field below number of companies tracked and remaining
+    fields place them below the retrieve field") — this just takes the
+    already-typed search_query and applies it, plus renders the Own/
+    Tracking tables."""
     if not all_stocks:
-        if st.button("📋 Management Guidance Tracker →",
-                      help="Track quarterly management guidance and Beat/Neutral/Miss per company"):
-            st.session_state["_view"] = "guidance_tracker"
-            st.rerun()
         st.markdown('<div class="vl-empty">No companies yet — retrieve one from Screener.in below.</div>',
                     unsafe_allow_html=True)
         return
 
-    # All 3 action buttons in ONE row, sized to their own text and packed
-    # left (2026-08-16, "buttons are at random places.. can we improve
-    # ui styles") — previously Guidance Tracker sat alone as a bare
-    # full-width element, then a separate st.columns([1, 1]) row below it
-    # split the *entire* page width in half for just two buttons, landing
-    # "Refresh all now" oddly out at the page's horizontal center instead
-    # of next to its sibling. A narrow ratio per button (sized ~to its
-    # own label) plus one trailing spacer column reads as one deliberate
-    # button bar instead of three independently-placed elements.
-    btn_col1, btn_col2, btn_col3, _spacer = st.columns([1.7, 1.3, 1.1, 3.4])
-    with btn_col1:
-        if st.button("📋 Management Guidance Tracker →",
-                      help="Track quarterly management guidance and Beat/Neutral/Miss per company"):
-            st.session_state["_view"] = "guidance_tracker"
-            st.rerun()
-    # Two separate refresh actions (2026-08-16, "2 refresh for
-    # fundamental data & prices alone, as prices do need daily updates")
-    # — Prices is the fast/cheap one (~half the requests per company,
-    # see fetch_price_only()) for something that's genuinely stale by
-    # the next trading session; Fundamentals (P&L/Quarterly Results/EMA)
-    # doesn't change day to day so it stays a deliberate, separate action.
-    with btn_col2:
-        if st.button("💹 Refresh prices only", help="Fast — price/PE/market cap/52W high only, no P&L/quarterly/EMA"):
-            n = refresh_prices_only(get_session_id())
-            st.success(f"Refreshed prices for {n} companies.")
-            st.rerun()
-    with btn_col3:
-        if st.button("🔄 Refresh all now", help="Full refresh — re-fetches P&L, Quarterly Results, and EMAs too (slower)"):
-            n = refresh_all_stocks(get_session_id())
-            st.success(f"Refreshed {n} companies.")
-            st.rerun()
+    # Search/filter box (2026-08-16 request) — filters BOTH sections by
+    # name or ticker, applied before the owned/tracking split so counts
+    # in each subheader reflect the filtered set too, not just which
+    # rows render under it.
+    if search_query.strip():
+        q = search_query.strip().lower()
+        all_stocks = {t: s for t, s in all_stocks.items()
+                      if q in s.get("name", "").lower() or q in t.lower()}
+        no_match_suffix = f" matching \"{search_query.strip()}\"."
+    else:
+        no_match_suffix = None
 
     # Split into two independently-sortable tables (2026-08-16, "divide
     # the summary to 2 parts, stocks I own and other as tracking") —
@@ -1522,12 +1510,15 @@ def page_summary(all_stocks, scenarios):
 
     st.subheader(f"📦 Stocks I Own ({len(owned_stocks)})")
     render_stock_section(owned_stocks, scenarios, "owned",
+                          f"No owned stocks{no_match_suffix}" if no_match_suffix else
                           "No owned stocks yet — check the Own box on a company below to move it here.")
 
     st.divider()
 
     st.subheader(f"🔭 Tracking ({len(tracking_stocks)})")
-    render_stock_section(tracking_stocks, scenarios, "tracking", "Nothing being tracked right now.")
+    render_stock_section(tracking_stocks, scenarios, "tracking",
+                          f"Nothing tracked{no_match_suffix}" if no_match_suffix else
+                          "Nothing being tracked right now.")
 
 
 # ───────────────────────── Management Guidance Tracker page ─────────────────────────
@@ -2263,10 +2254,45 @@ def main():
         st.markdown(f'<div style="font-size:28px;font-weight:700;color:var(--vl-ink);margin-top:2px;">'
                     f'{n_companies} compan{"y" if n_companies == 1 else "ies"} tracked</div>',
                     unsafe_allow_html=True)
+        # Search/filter box — moved here, right under the company count
+        # (2026-08-16, "place search field below number of companies
+        # tracked"; previously sat below the action-button row further
+        # down). Filters both Own/Tracking sections, applied inside
+        # page_summary(). Capped width, same pattern as the Retrieve
+        # form's own ticker input.
+        with st.container(key="vl_summary_search"):
+            search_query = st.text_input("Search", placeholder="🔍 Filter by name/ticker",
+                                          key="vl_summary_search_input", label_visibility="collapsed")
     with retrieve_col:
         section_retrieve(all_stocks)
+        # Action buttons stacked below the Retrieve form, not a separate
+        # full-width row (2026-08-16, "remaining fields place them below
+        # the retrieve field") — vertical since this column is only as
+        # wide as the Retrieve form itself, not the old horizontal
+        # [1.7, 1.3, 1.1, 3.4] row sized for the full page width.
+        if st.button("📋 Management Guidance Tracker →", use_container_width=True,
+                      help="Track quarterly management guidance and Beat/Neutral/Miss per company"):
+            st.session_state["_view"] = "guidance_tracker"
+            st.rerun()
+        # Two separate refresh actions (2026-08-16, "2 refresh for
+        # fundamental data & prices alone, as prices do need daily
+        # updates") — Prices is the fast/cheap one (~half the requests
+        # per company, see fetch_price_only()) for something that's
+        # genuinely stale by the next trading session; Fundamentals
+        # (P&L/Quarterly Results/EMA) doesn't change day to day so it
+        # stays a deliberate, separate action.
+        if st.button("💹 Refresh prices only", use_container_width=True,
+                      help="Fast — price/PE/market cap/52W high only, no P&L/quarterly/EMA"):
+            n = refresh_prices_only(get_session_id())
+            st.success(f"Refreshed prices for {n} companies.")
+            st.rerun()
+        if st.button("🔄 Refresh all now", use_container_width=True,
+                      help="Full refresh — re-fetches P&L, Quarterly Results, and EMAs too (slower)"):
+            n = refresh_all_stocks(get_session_id())
+            st.success(f"Refreshed {n} companies.")
+            st.rerun()
 
-    page_summary(all_stocks, scenarios)
+    page_summary(all_stocks, scenarios, search_query)
 
 
 if __name__ == "__main__":
