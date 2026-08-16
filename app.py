@@ -92,8 +92,13 @@ def check_password():
         return True
 
     st.title("🧮 Valuation Ledger")
-    pwd = st.text_input("Password", type="password", key="_pwd_input")
-    if st.button("Unlock"):
+    # st.form (not a bare text_input + button) so pressing Enter inside the
+    # password field submits it — Streamlit forms submit on Enter from any
+    # of their input widgets natively, no JS needed (2026-08-16 request).
+    with st.form("_pwd_form"):
+        pwd = st.text_input("Password", type="password", key="_pwd_input")
+        submitted = st.form_submit_button("Unlock")
+    if submitted:
         # Constant-time compare — trivial to add, avoids a timing side
         # channel on password length/prefix for what little it's worth.
         if hmac.compare_digest(pwd, app_password):
