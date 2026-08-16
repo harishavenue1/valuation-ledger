@@ -463,5 +463,42 @@
       ],
       "assumptions": ""
     }
+  },
+  "E2E": {
+    "bear": {
+      "drivers": [
+        {
+          "revGrowth": 18.0,
+          "opm": 51.0,
+          "tax": -27.0,
+          "other_income": 34.0,
+          "interest": 12.0,
+          "depreciation": 169.0,
+          "shares": 21.053,
+          "pe": 18.0
+        },
+        {
+          "revGrowth": 15.0,
+          "opm": 51.0,
+          "tax": -27.0,
+          "other_income": 34.0,
+          "interest": 12.0,
+          "depreciation": 169.0,
+          "shares": 21.053,
+          "pe": 15.0
+        },
+        {
+          "revGrowth": 15.0,
+          "opm": 51.0,
+          "tax": -27.0,
+          "other_income": 34.0,
+          "interest": 12.0,
+          "depreciation": 169.0,
+          "shares": 21.053,
+          "pe": 15.0
+        }
+      ],
+      "assumptions": ""
+    }
   }
 }
