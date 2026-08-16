@@ -500,5 +500,42 @@
       ],
       "assumptions": ""
     }
+  },
+  "BBOX": {
+    "bull": {
+      "drivers": [
+        {
+          "revGrowth": 25.0,
+          "opm": 9.0,
+          "tax": 9.0,
+          "other_income": -57.0,
+          "interest": 158.0,
+          "depreciation": 116.0,
+          "shares": 17.796,
+          "pe": 40.0
+        },
+        {
+          "revGrowth": 25.0,
+          "opm": 9.0,
+          "tax": 9.0,
+          "other_income": -57.0,
+          "interest": 158.0,
+          "depreciation": 116.0,
+          "shares": 17.796,
+          "pe": 25.0
+        },
+        {
+          "revGrowth": 25.0,
+          "opm": 9.0,
+          "tax": 9.0,
+          "other_income": -57.0,
+          "interest": 158.0,
+          "depreciation": 116.0,
+          "shares": 17.796,
+          "pe": 25.0
+        }
+      ],
+      "assumptions": ""
+    }
   }
 }
