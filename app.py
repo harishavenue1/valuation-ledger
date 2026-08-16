@@ -637,15 +637,23 @@ def inject_css():
        * request), so ➕ can keep appending columns rightward forever.
        * Every st.columns() row inside this one container shares the
        * same scroll position since none of them have their own overflow
-       * context — only the outer container does. */
+       * context — only the outer container does.
+       *
+       * 2026-08-16 (later same day): the grid now paginates quarters
+       * 3-at-a-time ("slides", see page_guidance_tracker's PAGE_SIZE) so
+       * horizontal scroll is now the fallback, not the norm — bumped
+       * every fixed width up (200→220, 260→340, 55→60) and the note
+       * st.text_area's height (see the row-render loop) since 3 visible
+       * columns leaves plenty of spare width/height that used to need
+       * rationing across however many quarters had piled up. */
       .st-key-vl_guidance_grid { overflow-x: auto; padding-bottom: 10px; }
       .st-key-vl_guidance_grid div[data-testid="stHorizontalBlock"] { flex-wrap: nowrap; min-width: max-content; }
       .st-key-vl_guidance_grid div[data-testid="stHorizontalBlock"] > div:first-child {
-        flex: 0 0 auto !important; width: 200px !important; min-width: 200px !important; }
+        flex: 0 0 auto !important; width: 220px !important; min-width: 220px !important; }
       .st-key-vl_guidance_grid div[data-testid="stHorizontalBlock"] > div:last-child {
-        flex: 0 0 auto !important; width: 55px !important; min-width: 55px !important; }
+        flex: 0 0 auto !important; width: 60px !important; min-width: 60px !important; }
       .st-key-vl_guidance_grid div[data-testid="stHorizontalBlock"] > div:not(:first-child):not(:last-child) {
-        flex: 0 0 auto !important; width: 260px !important; min-width: 260px !important; }
+        flex: 0 0 auto !important; width: 340px !important; min-width: 340px !important; }
 
       /* Slim icon buttons (the summary row's Remove) */
       div[data-testid="stHorizontalBlock"] button[kind="secondary"] { padding: 2px 10px; }
@@ -948,21 +956,55 @@ def page_guidance_tracker(all_stocks):
 
     st.divider()
 
+    # Quarters paginate 3-at-a-time ("slides") instead of all piling up in
+    # one horizontally-scrolling row (explicit request, 2026-08-16, later
+    # same day as the fixed-width change below) — with only 3 columns ever
+    # on screen at once, each can afford to be wider/taller than when an
+    # arbitrary number had to share the row. gt_slide is the 0-indexed
+    # slide number; session_state persists it across reruns (tag/note
+    # edits rerun this page) but NOT across a fresh page load, so opening
+    # the tracker always starts on the most recent slide.
+    PAGE_SIZE = 3
+    total_slides = max(1, -(-len(quarters) // PAGE_SIZE))  # ceil div
+    if "gt_slide" not in st.session_state:
+        st.session_state["gt_slide"] = total_slides - 1
+    st.session_state["gt_slide"] = max(0, min(st.session_state["gt_slide"], total_slides - 1))
+    slide = st.session_state["gt_slide"]
+    slide_start = slide * PAGE_SIZE
+    visible_quarters = quarters[slide_start:slide_start + PAGE_SIZE]
+
+    if total_slides > 1:
+        nav = st.columns([1, 3, 1])
+        with nav[0]:
+            if st.button("◀ Older", key="gt_slide_prev", disabled=slide == 0, use_container_width=True):
+                st.session_state["gt_slide"] = slide - 1
+                st.rerun()
+        with nav[1]:
+            st.markdown(f"<div style='text-align:center;color:var(--vl-muted);padding-top:6px;'>"
+                        f"Quarters {slide_start + 1}–{min(slide_start + PAGE_SIZE, len(quarters))} of "
+                        f"{len(quarters)}</div>", unsafe_allow_html=True)
+        with nav[2]:
+            if st.button("Newer ▶", key="gt_slide_next", disabled=slide >= total_slides - 1,
+                         use_container_width=True):
+                st.session_state["gt_slide"] = slide + 1
+                st.rerun()
+
     # Fixed pixel widths + horizontal scroll (explicit request, 2026-08-16:
     # "set the width to each quarter to at least sizeable to write and
     # read easily") instead of Streamlit's normal st.columns() behavior,
     # which proportionally SHRINKS every column to fit the container —
-    # fine for a handful of columns, unusable once enough quarters pile
-    # up. Scoped to this one container (.st-key-vl_guidance_grid, see
+    # scroll is now just a fallback for narrow viewports since pagination
+    # above caps this at 3 quarter columns regardless of how many exist
+    # overall. Scoped to this one container (.st-key-vl_guidance_grid, see
     # inject_css()) so it can't affect the Summary table or the
     # Fundamentals/Projections grids on the Detail page, which all still
     # want the normal shrink-to-fit behavior. Structural :first-child /
     # :nth-last-child selectors (not nth-child(N) counting from the
     # start) so the CSS doesn't need to know how many quarter columns
-    # exist — Company stays wide-fixed on the left, Price/Remove stay
-    # narrow-fixed on the right, and every quarter in between gets the
-    # same comfortable fixed width regardless of count. The relative
-    # ratios still passed to st.columns() below are moot once this CSS's
+    # are visible — Company stays wide-fixed on the left, ➕ stays
+    # narrow-fixed on the right, and every visible quarter in between
+    # gets the same comfortable fixed width. The relative ratios still
+    # passed to st.columns() below are moot once this CSS's
     # `flex: 0 0 auto` overrides them — kept only because st.columns()
     # requires *some* ratio list matching the column count.
     with st.container(key="vl_guidance_grid"):
@@ -972,9 +1014,11 @@ def page_guidance_tracker(all_stocks):
         # this grid entirely (already on the Summary page, redundant
         # here), and the per-row remove button moved into the Company
         # cell itself so nothing trails after ➕ either. New quarters
-        # just keep extending the row rightward with ➕ always at the tip.
-        col_widths = [2.0] + [1.4] * len(quarters) + [0.5]
-        add_q_col = 1 + len(quarters)  # == last index
+        # just keep extending the list rightward with ➕ always at the
+        # tip of the full list — adding one auto-jumps to the slide that
+        # now contains it, since it's by definition the most recent.
+        col_widths = [2.0] + [1.4] * len(visible_quarters) + [0.5]
+        add_q_col = 1 + len(visible_quarters)  # == last index
 
         # ── Header row ── (remove button stacked under the label, not a
         # nested st.columns(), so the fixed-width CSS above — which
@@ -982,8 +1026,9 @@ def page_guidance_tracker(all_stocks):
         # nested row to accidentally also force wide)
         header = st.columns(col_widths)
         header[0].markdown("**Company**")
-        for i, q in enumerate(quarters):
-            with header[1 + i]:
+        for vi, q in enumerate(visible_quarters):
+            i = slide_start + vi  # real index into the full quarters list
+            with header[1 + vi]:
                 # Keyed by the quarter's own label, not its index — an
                 # index-based key would collide with stale session_state
                 # left over from whatever quarter used to sit at that
@@ -1014,6 +1059,7 @@ def page_guidance_tracker(all_stocks):
                     label = f"Quarter {n}"
                 quarters.append(label)
                 save_guidance_tracker(tracker)
+                st.session_state["gt_slide"] = max(0, -(-len(quarters) // PAGE_SIZE) - 1)
                 st.rerun()
         st.markdown('<hr style="margin:2px 0 8px;border-color:var(--vl-border);">', unsafe_allow_html=True)
 
@@ -1032,9 +1078,9 @@ def page_guidance_tracker(all_stocks):
                     save_guidance_tracker(tracker)
                     st.rerun()
 
-            for i, q in enumerate(quarters):
+            for vi, q in enumerate(visible_quarters):
                 cell = row_cells.setdefault(q, {"note": "", "tag": ""})
-                with cols[1 + i]:
+                with cols[1 + vi]:
                     tag = st.selectbox("Tag", GUIDANCE_TAGS,
                                         index=GUIDANCE_TAGS.index(cell["tag"]) if cell["tag"] in GUIDANCE_TAGS else 0,
                                         key=f"gt_{ticker}_{q}_tag", label_visibility="collapsed")
@@ -1047,8 +1093,12 @@ def page_guidance_tracker(all_stocks):
                     badge_html = (f"<span class='vl-badge {GUIDANCE_TAG_CLASS[tag]}'>{tag}</span>" if tag
                                   else "<span class='vl-badge' style='visibility:hidden;'>—</span>")
                     st.markdown(badge_html, unsafe_allow_html=True)
+                    # height bumped 90→140 (2026-08-16, same request as the
+                    # column-width bump above) — 3-per-slide pagination
+                    # freed up enough width that taller notes read better
+                    # than wider-but-shorter ones.
                     note = st.text_area("Note", value=cell["note"], key=f"gt_{ticker}_{q}_note",
-                                         label_visibility="collapsed", height=90,
+                                         label_visibility="collapsed", height=140,
                                          placeholder="Guidance / commentary…")
                     if tag != cell["tag"] or note != cell["note"]:
                         row_cells[q] = {"note": note, "tag": tag}
