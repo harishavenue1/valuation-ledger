@@ -1300,8 +1300,13 @@ def page_detail(stock, ticker, scenarios):
             st.success("Refreshed.")
             st.rerun()
 
+    # GRID_CASES, not CASES — drops the Management Case chip (2026-08-16,
+    # "we dnt have mgmt guidance, lets remove"), same exclusion already
+    # applied to the Summary page and this page's own Projections grid/
+    # Key Assumptions (see GRID_CASES's definition). Any Management Case
+    # scenario data already saved is untouched, just not shown here.
     chips = []
-    for case in CASES:
+    for case in GRID_CASES:
         state = get_case_state(scenarios, stock, ticker, case)
         h = headline_cagr(stock, state)
         color = CASE_COLOR[case]
@@ -1648,6 +1653,15 @@ def main():
     with title_col:
         st.title("🧮 Valuation Ledger")
         st.caption("Summary — retrieve companies live from Screener.in")
+        # Company count (2026-08-16 request) — moved to its own line below
+        # the caption, big font, rather than folded into the small caption
+        # text. n_companies from all_stocks (every retrieved company), not
+        # the Guidance Tracker's separate "tracked" subset (see
+        # load_guidance_tracker's docstring for that distinction).
+        n_companies = len(all_stocks)
+        st.markdown(f'<div style="font-size:28px;font-weight:700;color:var(--vl-ink);margin-top:2px;">'
+                    f'{n_companies} compan{"y" if n_companies == 1 else "ies"} tracked</div>',
+                    unsafe_allow_html=True)
     with retrieve_col:
         section_retrieve(all_stocks)
 
