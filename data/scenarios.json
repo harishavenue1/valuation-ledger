@@ -907,5 +907,42 @@
       ],
       "assumptions": ""
     }
+  },
+  "MTARTECH": {
+    "bull": {
+      "drivers": [
+        {
+          "revGrowth": 40.0,
+          "opm": 20.0,
+          "tax": 25.0,
+          "other_income": 19.0,
+          "interest": 29.0,
+          "depreciation": 35.0,
+          "shares": 3.075,
+          "pe": 40.0
+        },
+        {
+          "revGrowth": 25.0,
+          "opm": 20.0,
+          "tax": 25.0,
+          "other_income": 19.0,
+          "interest": 29.0,
+          "depreciation": 35.0,
+          "shares": 3.075,
+          "pe": 25.0
+        },
+        {
+          "revGrowth": 25.0,
+          "opm": 20.0,
+          "tax": 25.0,
+          "other_income": 19.0,
+          "interest": 29.0,
+          "depreciation": 35.0,
+          "shares": 3.075,
+          "pe": 25.0
+        }
+      ],
+      "assumptions": ""
+    }
   }
 }
