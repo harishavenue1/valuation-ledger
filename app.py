@@ -1195,8 +1195,18 @@ def render_stock_section(stocks, scenarios, section_key, empty_msg):
     # growth%") — latest-quarter YoY, the last entry of q_revenue_growth_pct
     # (oldest-to-newest, same order as "quarters"; see screener_fetch.py).
     # None for companies not yet refreshed since Quarterly Results shipped.
-    ema_start = 4
-    col_widths = [2.2, 0.8, 0.6, 0.75] + [0.5] * len(EMA_COLS) + [1.05, 1.05, 1.05, 0.5, 0.55]
+    # Upside/Downside to Bull inserted after P/E, before Qtr Sales Gr%
+    # (2026-08-16, "Base-case upside/downside %", then "use bull case, as
+    # I did conservative bull case inputs provided already" — Bull is
+    # this user's realistic case, not an aspirational stretch case, so
+    # it's the one to measure upside against, not Base. The Bull cell
+    # further right already shows an *annualized* CAGR to its target
+    # year, but that buries the plain "how far is today's price from
+    # that target" number a user actually scans first; this reuses
+    # headline_cagr()'s already-computed share_price, no new fetching
+    # needed).
+    ema_start = 5
+    col_widths = [2.2, 0.8, 0.6, 0.85, 0.75] + [0.5] * len(EMA_COLS) + [1.05, 1.05, 1.05, 0.5, 0.55]
     n_ema_cols = len(EMA_COLS)
     case_start = ema_start + n_ema_cols
     n_case_cols = len(GRID_CASES)
@@ -1223,8 +1233,16 @@ def render_stock_section(stocks, scenarios, section_key, empty_msg):
         q_labels = stock.get("quarters")
         qtr_sales_g = q_growth[-1] if q_growth else None
         qtr_sales_label = q_labels[-1] if q_labels else None
+        # Upside is measured off the Bull case, not Base (2026-08-16,
+        # "use bull case, as I did conservative bull case inputs
+        # provided already" — for this user Bull is already the
+        # realistic/conservative scenario, so Base would understate it).
+        bull_h = case_headline.get("bull")
+        upside = None
+        if bull_h and bull_h.get("share_price") is not None and price:
+            upside = (bull_h["share_price"] / price - 1) * 100
         rows.append({"ticker": ticker, "stock": stock, "price": price, "pe": stock.get("pe_ratio"),
-                      "case_headline": case_headline, "case_cagr": case_cagr,
+                      "case_headline": case_headline, "case_cagr": case_cagr, "upside": upside,
                       "qtr_sales_g": qtr_sales_g, "qtr_sales_label": qtr_sales_label})
 
     def sort_value(row, col):
@@ -1236,6 +1254,8 @@ def render_stock_section(stocks, scenarios, section_key, empty_msg):
             return row["pe"]
         if col == "qtr_sales_g":
             return row["qtr_sales_g"]
+        if col == "upside":
+            return row["upside"]
         if col.startswith("ema_"):
             ema_key = col[len("ema_"):]
             ema_val = row["stock"].get(ema_key)
@@ -1272,8 +1292,8 @@ def render_stock_section(stocks, scenarios, section_key, empty_msg):
     # centers its FY-year/EPS-growth-PE-CAGR line, so a left-aligned
     # header above it had the same header/value mismatch already fixed
     # once for the EMA columns.
-    header_defs = ([("name", "Company", False), ("price", "Price", False), ("pe", "P/E", False),
-                     ("qtr_sales_g", "Qtr Sales Gr%", True)]
+    header_defs = ([("name", "Company", False), ("price", "Price", True), ("pe", "P/E", True),
+                     ("upside", "Upside", True), ("qtr_sales_g", "Qtr Sales Gr%", True)]
                     + [(f"ema_{k}", lbl, True) for k, lbl in EMA_COLS]
                     + [(c, CASE_LABEL[c].replace(" Case", ""), True) for c in GRID_CASES])
 
@@ -1286,10 +1306,12 @@ def render_stock_section(stocks, scenarios, section_key, empty_msg):
     # own text, like before.
     with st.container(key=f"vl_summary_header_{section_key}"):
         header = st.columns(col_widths)
+        header_help = {"upside": "Current price vs. the Bull case's target price today (not annualized — "
+                                  "see the Bull column further right for the annualized CAGR to that target)"}
         for i, (col_id, label, centered) in enumerate(header_defs):
             with header[i]:
                 if st.button(header_text(col_id, label), key=f"{section_key}_sort_{col_id}", type="tertiary",
-                             use_container_width=centered):
+                             use_container_width=centered, help=header_help.get(col_id)):
                     if sort_col == col_id:
                         st.session_state[sort_dir_key] = "desc" if sort_dir == "asc" else "asc"
                     else:
@@ -1323,9 +1345,16 @@ def render_stock_section(stocks, scenarios, section_key, empty_msg):
             st.rerun()
         cols[0].markdown(f"<span class='vl-sub' style='display:block;margin-top:-10px;'>{ticker}</span>",
                           unsafe_allow_html=True)
-        cols[1].write(f"₹{fmt(row['price'])}")
-        cols[2].write(f"{fmt(row['pe'], 1)}x")
-        cols[3].markdown(qtr_sales_growth_html(row["qtr_sales_label"], row["qtr_sales_g"]), unsafe_allow_html=True)
+        # Centered, like every other value column (2026-08-16, "spacing
+        # is uneven between cols" — Price/P/E were the only two still on
+        # plain left-aligned st.write(); the real column gap is a fixed
+        # 16px everywhere (verified), but Price/P/E's left-hugging text
+        # against neighboring centered columns read as ragged/uneven
+        # whitespace even though the grid itself was consistent).
+        cols[1].markdown(f'<div style="text-align:center;">₹{fmt(row["price"])}</div>', unsafe_allow_html=True)
+        cols[2].markdown(f'<div style="text-align:center;">{fmt(row["pe"], 1)}x</div>', unsafe_allow_html=True)
+        cols[3].markdown(pct_value_html(row["upside"]), unsafe_allow_html=True)
+        cols[4].markdown(qtr_sales_growth_html(row["qtr_sales_label"], row["qtr_sales_g"]), unsafe_allow_html=True)
         for i, (ema_key, _) in enumerate(EMA_COLS):
             cols[ema_start + i].markdown(ema_pct_html(row["price"], stock.get(ema_key)), unsafe_allow_html=True)
         for i, case in enumerate(GRID_CASES):
