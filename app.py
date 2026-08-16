@@ -54,6 +54,15 @@ CASE_LABEL = {"base": "Base Case", "bull": "Bull Case", "bear": "Bear Case", "mg
 CASE_COLOR = {"base": "#B7C0BB", "bull": "#63C46E", "bear": "#E3776A", "mgmt": "#C4A8E8"}
 N_EST_YEARS = 3
 
+# Fallback Revenue Growth % seed when a company has no guidance research
+# yet (default_case_state()) — a rough, admittedly generic starting
+# point (2026-08-16 request: "later user can read the concall, write up
+# commentary and edit back the growth rates to match up") so every case
+# computes a CAGR out of the box instead of sitting on "fill PE"/blank
+# until someone types something in. Never applied to Management Case,
+# same as guidance seeding.
+DEFAULT_REV_GROWTH = {"base": 20.0, "bull": 25.0, "bear": 15.0}
+
 # Management Case is dropped from the Future Projections grid and the
 # Summary page table (explicit request, 2026-08-15) — it's never
 # guidance-seeded anyway and stayed blank/unused in both most of the
@@ -415,13 +424,14 @@ def _local_save_guidance_tracker(data):
 def load_guidance_tracker():
     """{"quarters": [labels...], "tracked": [tickers...], "cells": {ticker:
     {quarter_label: {"note": str, "tag": ""|"Beat"|"Neutral"|"Miss"}}}}.
-    "tracked" is this page's OWN row list — deliberately separate from
-    all_stocks.json's full company set (explicit request, 2026-08-16:
-    "in this page we can row wise add more companies", read as this
-    page having its own add/remove independent of the Summary page's
-    list) — though adding a company here still fetches into the shared
-    all_stocks.json via the same fetch_one()/save_all_stocks() path, so
-    price data isn't duplicated, only tracked-here membership is."""
+    "tracked" is this page's own row list, still removable independently
+    here (its own 🗑️ only drops tracked-here membership, not the company
+    itself) — but no longer independently ADDED to: a Retrieve on the
+    Summary page now appends here too (2026-08-16, "if a company is
+    added to summary screen, same should be available on management
+    guidance tracker page also"), on top of this page's own Add a
+    company form doing the same in the other direction. One-directional
+    only — a company removed from here stays on the Summary page."""
     cfg = get_github_config()
     path = cfg["guidance_tracker_path"] if cfg else "data/guidance_tracker.json"
     return _github_synced_load("guidance_tracker_cache", "guidance_tracker_sha", path,
@@ -449,13 +459,24 @@ def default_case_state(stock, ticker, case):
     """Revenue Growth % seeds from cache/guidance/<TICKER>.json when
     present (Base=range midpoint, Bull=upper, Bear=lower — never for
     Management Case, which stays open for the user's own "if management
-    is right" modelling). OPM%/Tax% always carry forward the last actual
-    value regardless of guidance — computeModel() needs both non-null
-    before it can produce PBT/PAT/EPS at all."""
+    is right" modelling). Falls back to DEFAULT_REV_GROWTH (20/25/15)
+    when there's no guidance yet (2026-08-16 request) — a placeholder the
+    user is expected to overwrite once they've actually read the concall/
+    management commentary, not a real estimate; guidance, when present,
+    always wins over this generic default. OPM%/Tax% always carry forward
+    the last actual value regardless of guidance — computeModel() needs
+    both non-null before it can produce PBT/PAT/EPS at all."""
     guidance = load_guidance(ticker)
-    guided_growth = None
-    if guidance and case != "mgmt":
-        guided_growth = guidance.get("revenue_growth", {}).get(case)
+    # from_guidance (truly guidance-sourced) tracked separately from
+    # guided_growth (what actually seeds the drivers below, generic
+    # fallback included) — the assumptions note further down must only
+    # claim "auto-filled from management guidance research" when it's
+    # from_guidance, never when it's just DEFAULT_REV_GROWTH standing in
+    # for a company with no guidance research done yet.
+    from_guidance = guidance.get("revenue_growth", {}).get(case) if guidance and case != "mgmt" else None
+    guided_growth = from_guidance
+    if guided_growth is None and case != "mgmt":
+        guided_growth = DEFAULT_REV_GROWTH.get(case)
     drivers = []
     for _ in range(N_EST_YEARS):
         drivers.append({
@@ -466,15 +487,25 @@ def default_case_state(stock, ticker, case):
             "interest": last_actual(stock.get("interest")),
             "depreciation": last_actual(stock.get("depreciation")),
             "shares": last_actual(stock.get("shares_cr")),
-            "pe": None,
+            # Defaults to the same value as Revenue Growth % (2026-08-16
+            # request: "set PE = revenue growth ... let it editable") — a
+            # PEG-of-1 starting point (25% growth → PE 25x) instead of
+            # blank, so the projections grid/Summary page's Base/Bull/Bear
+            # cells compute a CAGR immediately, rather than sitting on
+            # "fill PE" until the user manually types one in. Still a
+            # plain editable number_input either way — this only changes
+            # the seed value used before anyone (or any saved scenario)
+            # has touched it. Only stays None for the Management Case,
+            # which never seeds a growth default at all (see above).
+            "pe": guided_growth,
         })
     assumptions = ""
-    if guided_growth is not None and guidance and guidance.get("source_text"):
+    if from_guidance is not None and guidance and guidance.get("source_text"):
         which = ("guidance range midpoint" if case == "base"
                  else "guidance range upper end" if case == "bull" else "guidance range lower end")
         assumptions = (
             f"[Auto-filled from management guidance research]\n\n"
-            f"Revenue Growth % ({CASE_LABEL[case]}): {guided_growth}% — {which}.\n\n"
+            f"Revenue Growth % ({CASE_LABEL[case]}): {from_guidance}% — {which}.\n\n"
             f"Guidance: {guidance['source_text']}\n\n"
             f"Confidence: {guidance.get('confidence', '')}\n\n"
             f"Sources: {', '.join(guidance.get('source_urls', []))}\n\n"
@@ -637,7 +668,8 @@ def inject_css():
        * rendered under each quarter's tag selectbox (same .vl-badge
        * shape as vl-badge-guidance above, not a widget-wrapper hack —
        * simpler and matches how CAGR +/- is already color-coded via
-       * plain markdown spans elsewhere, e.g. cagr_html()). */
+       * plain markdown spans elsewhere, e.g. the projections grid's own
+       * CAGR row). */
       .vl-tag-beat { color: var(--vl-good) !important; background: rgba(99,196,110,0.14); }
       .vl-tag-miss { color: var(--vl-bad) !important; background: rgba(227,119,106,0.14); }
       .vl-tag-neutral { color: var(--vl-brass) !important; background: rgba(224,179,77,0.14); }
@@ -678,15 +710,23 @@ def inject_css():
       .st-key-vl_guidance_grid div[data-testid="stHorizontalBlock"] > div:not(:first-child):not(:last-child) {
         flex: 1 1 0 !important; min-width: 340px !important; }
 
-      /* Guidance Tracker's Add-company button and Older/Newer pager
-       * (2026-08-16, "reduce the size of buttons") — both used to
-       * stretch full-width via use_container_width/wide columns; these
-       * are small, secondary controls so they now size to their text
-       * instead. Newer's column right-aligns it to sit under the ➕ side
-       * of the grid rather than hugging the middle label. */
-      .st-key-vl_gt_add_company button,
+      /* Guidance Tracker's Older/Newer pager (2026-08-16, "reduce the
+       * size of buttons") — used to stretch full-width via wide columns;
+       * these are small, secondary controls so they now size to their
+       * text instead. The Add-company button used to get the same
+       * treatment, but once its form's width got capped (below) to match
+       * the header, a fixed-width button went back to full-width
+       * (use_container_width, at the call site) so it doesn't look
+       * undersized in the now-narrow form. */
       .st-key-vl_gt_nav button {
         padding: 4px 16px !important; font-size: 13px !important; width: auto !important; }
+      /* Add-company form itself capped to ~the "Management Guidance
+       * Tracker" subheader's own rendered width (~425px, measured; 480px
+       * leaves breathing room) — 2026-08-16, "set width as per header for
+       * adding company", same pattern as the password gate's login box:
+       * a small utility form reads better aligned under its heading than
+       * stretched across the full page. */
+      .st-key-vl_gt_add_company { max-width: 480px; }
       .st-key-vl_gt_nav div[data-testid="stHorizontalBlock"] > div:last-child {
         display: flex !important; justify-content: flex-end !important; }
 
@@ -712,8 +752,14 @@ def inject_css():
       div[data-testid="stNumberInput"] input {
         background: transparent !important; border: none !important;
         border-bottom: 1px dashed var(--vl-faint) !important; border-radius: 0 !important;
-        color: var(--vl-ink) !important; font-size: 13px !important;
-        text-align: right !important; padding: 2px 4px !important; height: 30px !important;
+        /* 13px → 15px (2026-08-16, "increase the font in this table") */
+        color: var(--vl-ink) !important; font-size: 15px !important;
+        /* center, not right (2026-08-16, "numbers indented are messed,
+         * let's keep center") — matches the auto-computed rows below
+         * (Revenue/PAT/EPS, already text-align:center) and this grid's
+         * only other st.number_input use site, the PE Multiple row, so
+         * every value in the grid now lines up on the same axis. */
+        text-align: center !important; padding: 2px 4px !important; height: 30px !important;
       }
       div[data-testid="stNumberInput"] button { display: none !important; }
       div[data-testid="stNumberInput"]:has(input[aria-label="Revenue Growth %"]) input,
@@ -742,7 +788,7 @@ def inject_css():
        * is built around — shrink + force single line so column width
        * math never has to guess the exact pixel budget. */
       .st-key-vl_projections_grid div[data-testid="stHorizontalBlock"] > div:first-child p {
-        font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       }
     </style>
     """, unsafe_allow_html=True)
@@ -764,34 +810,50 @@ def render_chip_row(chips):
     st.markdown(f'<div class="vl-chip-row">{cards}</div>', unsafe_allow_html=True)
 
 
-def cagr_html(cagr, sub):
-    if cagr is None:
-        return '<span class="vl-sub">—</span>'
-    cls = "vl-pos" if cagr >= 0 else "vl-neg"
-    return f'<span class="{cls}">{fmt_signed(cagr, 1)}</span><br><span class="vl-sub">{sub}</span>'
+def case_summary_cell_html(h):
+    """Summary page's Base/Bull/Bear cell (2026-08-16 request) — FY year
+    promoted to a small header line instead of buried at the bottom
+    ("set the FY Year to header"; kept per-row rather than in the actual
+    page header since different companies can land on different FY years
+    for the same case — each one's estimate years are counted from its
+    own last reported year, not a shared calendar), then EPS Growth | PE
+    | CAGR collapsed onto one compact line in that order ("instead of 2
+    lines, start with EPS Growth | PE | CAGR" — previously CAGR was the
+    big headline number with growth/PE/price/year stacked below it across
+    2 lines; share price dropped here, still on the Detail page).
+    "growth" is really the revenue-growth driver that feeds the whole
+    model (see headline_cagr's dict) — labeled EPS Growth here since
+    that's the number it ultimately drives.
+    `h` is a headline_cagr() dict, or None/cagr-less when PE isn't filled
+    in yet for any estimate year."""
+    if not h or h["cagr"] is None:
+        return '<div style="text-align:center;"><span class="vl-sub">fill PE</span></div>'
+    cls = "vl-pos" if h["cagr"] >= 0 else "vl-neg"
+    # Font sizes bumped 10.5px/12px → 11.5px/14px (2026-08-16, "increase
+    # number fonts as we have enough space") — the column has room now
+    # that this collapsed to one value line instead of two.
+    return (f'<div style="text-align:center;">'
+            f'<div style="font-size:11.5px;font-weight:700;color:var(--vl-faint);">FY{h["year"]}</div>'
+            f'<div style="font-size:14px;white-space:nowrap;">{fmt_signed(h["growth"], 1)} | {fmt(h["pe"], 1)}x | '
+            f'<span class="{cls}" style="font-weight:700;">{fmt_signed(h["cagr"], 1)}</span></div>'
+            f'</div>')
 
 
-def ema_yn_html(price, ema_value):
-    """Y = price currently above that EMA (bullish), N = at/below, plus
-    the signed % gap between price and that EMA underneath (added
-    2026-08-16, request: "easy to track ones closer to ema") — small
-    magnitude either direction means price is sitting right on the EMA
-    (support/resistance zone, or an imminent crossover), which the Y/N
-    letter alone can't distinguish from one that's decisively cleared
-    it. The sign always agrees with Y/N by construction (Y ⟺ positive),
-    so this isn't contradictory information, just the magnitude Y/N
-    alone throws away. "—" when either input is missing (e.g. a company
-    added before this existed and not yet refreshed, or the EMA fetch
-    failed for that company on last refresh — see fetch_one()'s
-    degrade-to-None handling in screener_fetch.py)."""
+def ema_pct_html(price, ema_value):
+    """Signed % gap between price and that EMA — sign alone conveys
+    above/below (positive = above = bullish), so no separate Y/N letter
+    is shown (2026-08-16, "instead of Y or N, let's directly give the
+    percentage values" — replaces the earlier Y/N-plus-%-underneath
+    version, renamed from ema_yn_html accordingly). "—" when either
+    input is missing (e.g. a company added before this existed and not
+    yet refreshed, or the EMA fetch failed for that company on last
+    refresh — see fetch_one()'s degrade-to-None handling in
+    screener_fetch.py)."""
     if price is None or ema_value is None or ema_value == 0:
         return '<div style="text-align:center;"><span class="vl-sub">—</span></div>'
-    is_above = price > ema_value
-    cls = "vl-pos" if is_above else "vl-neg"
-    label = "Y" if is_above else "N"
     pct = (price - ema_value) / ema_value * 100
-    return (f'<div style="text-align:center;"><span class="{cls}" style="font-weight:700;">{label}</span>'
-            f'<br><span class="{cls}" style="font-size:11px;">{fmt_signed(pct)}</span></div>')
+    cls = "vl-pos" if pct >= 0 else "vl-neg"
+    return f'<div style="text-align:center;"><span class="{cls}" style="font-weight:700;">{fmt_signed(pct)}</span></div>'
 
 
 def hist_cell_html(v, digits, suffix, colorize, bold):
@@ -879,25 +941,95 @@ def page_summary(all_stocks, scenarios):
         st.rerun()
 
     # GRID_CASES (module-level, excludes "mgmt") drives the case columns —
-    # see its definition for why. EMA_COLS: Y = price currently above that
-    # EMA, N = at/below (see ema_yn_html()) — Close-based via Screener's
-    # own chart API, not OHLC4 (explicit trade-off, 2026-08-16, over a
-    # second data source like yfinance that has no coverage for SME/
-    # small-cap names this app otherwise supports).
+    # see its definition for why. EMA_COLS: signed % gap between price and
+    # that EMA, sign alone conveying above/below (see ema_pct_html()) —
+    # Close-based via Screener's own chart API, not OHLC4 (explicit
+    # trade-off, 2026-08-16, over a second data source like yfinance that
+    # has no coverage for SME/small-cap names this app otherwise supports).
     EMA_COLS = [("ema20d", "20D"), ("ema50d", "50D"), ("ema33w", "33W")]
     col_widths = [2.2, 0.8, 0.6] + [0.5] * len(EMA_COLS) + [1.05, 1.05, 1.05, 0.55]
-    header_labels = (["Company", "Price", "P/E"] + [lbl for _, lbl in EMA_COLS]
-                      + [CASE_LABEL[c].replace(" Case", "") for c in GRID_CASES] + [""])
-    header = st.columns(col_widths)
-    for col, label in zip(header, header_labels):
-        col.markdown(f"**{label}**")
-    st.markdown('<hr style="margin:2px 0 8px;border-color:var(--vl-border);">', unsafe_allow_html=True)
-
     n_ema_cols = len(EMA_COLS)
     case_start = 3 + n_ema_cols
     n_case_cols = len(GRID_CASES)
     remove_col = case_start + n_case_cols
+
+    # ── Sort — every column clickable (2026-08-16 request). Sort key per
+    # row is computed once up front (needed before we know render order
+    # anyway), keyed by a stable column id independent of display label so
+    # a case-label rename (CASE_LABEL) can't silently break a saved sort.
+    # None-valued cells (company not yet refreshed, EMA fetch failure,
+    # case CAGR needing a PE fill first) always sort to the bottom
+    # regardless of direction — split them out rather than relying on
+    # Python's sort+reverse, which would put them first on a "desc" sort.
+    rows = []
     for ticker, stock in all_stocks.items():
+        price = stock.get("current_price")
+        case_cagr, case_headline = {}, {}
+        for case in GRID_CASES:
+            h = headline_cagr(stock, get_case_state(scenarios, stock, ticker, case))
+            case_headline[case] = h
+            case_cagr[case] = h["cagr"] if h and h["cagr"] is not None else None
+        rows.append({"ticker": ticker, "stock": stock, "price": price,
+                      "pe": stock.get("pe_ratio"), "case_headline": case_headline, "case_cagr": case_cagr})
+
+    def sort_value(row, col):
+        if col == "name":
+            return row["stock"]["name"].lower()
+        if col == "price":
+            return row["price"]
+        if col == "pe":
+            return row["pe"]
+        if col.startswith("ema_"):
+            ema_key = col[len("ema_"):]
+            ema_val = row["stock"].get(ema_key)
+            return (row["price"] - ema_val) / ema_val * 100 if row["price"] is not None and ema_val else None
+        return row["case_cagr"].get(col)
+
+    sort_col = st.session_state.get("summary_sort_col")
+    sort_dir = st.session_state.get("summary_sort_dir", "asc")
+    if sort_col:
+        present = [r for r in rows if sort_value(r, sort_col) is not None]
+        missing = [r for r in rows if sort_value(r, sort_col) is None]
+        present.sort(key=lambda r: sort_value(r, sort_col), reverse=(sort_dir == "desc"))
+        rows = present + missing
+
+    def header_text(col_id, label):
+        if col_id != sort_col:
+            return label
+        return f"{label} {'▼' if sort_dir == 'desc' else '▲'}"
+
+    # Column id, display label, center-aligned (matches its value below).
+    # Base/Bull/Bear centered too (2026-08-16 fix) — case_summary_cell_html
+    # centers its FY-year/EPS-growth-PE-CAGR line, so a left-aligned
+    # header above it had the same header/value mismatch already fixed
+    # once for the EMA columns.
+    header_defs = ([("name", "Company", False), ("price", "Price", False), ("pe", "P/E", False)]
+                    + [(f"ema_{k}", lbl, True) for k, lbl in EMA_COLS]
+                    + [(c, CASE_LABEL[c].replace(" Case", ""), True) for c in GRID_CASES])
+
+    # Header buttons reuse the existing tertiary "link text" styling (see
+    # inject_css()'s button[kind="tertiary"] rule) instead of new CSS —
+    # clicking toggles asc/desc on the same column, or switches to a new
+    # one at asc. use_container_width only on the EMA columns so their
+    # (already-centered) button text lines up with ema_pct_html below;
+    # the rest stay left-aligned, sized to their own text, like before.
+    with st.container(key="vl_summary_header"):
+        header = st.columns(col_widths)
+        for i, (col_id, label, centered) in enumerate(header_defs):
+            with header[i]:
+                if st.button(header_text(col_id, label), key=f"sort_{col_id}", type="tertiary",
+                             use_container_width=centered):
+                    if sort_col == col_id:
+                        st.session_state["summary_sort_dir"] = "desc" if sort_dir == "asc" else "asc"
+                    else:
+                        st.session_state["summary_sort_col"] = col_id
+                        st.session_state["summary_sort_dir"] = "asc"
+                    st.rerun()
+        header[remove_col].write("")  # Remove column — no header, not sortable
+    st.markdown('<hr style="margin:2px 0 8px;border-color:var(--vl-border);">', unsafe_allow_html=True)
+
+    for row in rows:
+        ticker, stock = row["ticker"], row["stock"]
         cols = st.columns(col_widths)
         # Name itself opens the Detail page (replaces the old standalone 🔍
         # icon column, 2026-08-15) — styled via the tertiary-button CSS
@@ -907,21 +1039,13 @@ def page_summary(all_stocks, scenarios):
             st.rerun()
         cols[0].markdown(f"<span class='vl-sub' style='display:block;margin-top:-10px;'>{ticker}</span>",
                           unsafe_allow_html=True)
-        cols[1].write(f"₹{fmt(stock.get('current_price'))}")
-        cols[2].write(f"{fmt(stock.get('pe_ratio'), 1)}x")
+        cols[1].write(f"₹{fmt(row['price'])}")
+        cols[2].write(f"{fmt(row['pe'], 1)}x")
         for i, (ema_key, _) in enumerate(EMA_COLS):
-            cols[3 + i].markdown(ema_yn_html(stock.get("current_price"), stock.get(ema_key)),
-                                  unsafe_allow_html=True)
+            cols[3 + i].markdown(ema_pct_html(row["price"], stock.get(ema_key)), unsafe_allow_html=True)
         for i, case in enumerate(GRID_CASES):
-            state = get_case_state(scenarios, stock, ticker, case)
-            h = headline_cagr(stock, state)
-            # Growth% and PE are the two assumptions that actually drove
-            # this CAGR (added on request, 2026-08-15) — shown above the
-            # price/year line so it's legible at a glance which case grew
-            # revenue how fast at what exit multiple, not just the result.
-            sub = (f"{fmt(h['growth'], 1)}% gr · {fmt(h['pe'], 1)}x PE<br>"
-                   f"₹{fmt(h['share_price'])} · FY{h['year']}") if h and h["cagr"] is not None else "fill PE"
-            cols[case_start + i].markdown(cagr_html(h["cagr"] if h else None, sub), unsafe_allow_html=True)
+            cols[case_start + i].markdown(case_summary_cell_html(row["case_headline"][case]),
+                                           unsafe_allow_html=True)
         if cols[remove_col].button("🗑️", key=f"remove_{ticker}", help=f"Remove {stock['name']} from tracking", use_container_width=True):
             raw = load_raw_all_stocks()
             raw.pop(ticker, None)
@@ -965,13 +1089,14 @@ def page_guidance_tracker(all_stocks):
     # primary button on the Summary page, which stays full-width on purpose.
     with st.container(key="vl_gt_add_company"):
         with st.form("gt_add_company", clear_on_submit=True):
-            c1, c2 = st.columns([6, 1])
-            with c1:
-                new_ticker = st.text_input("Add a company to this tracker",
-                                            placeholder="e.g. TITAN, or a numeric BSE code for SME names").strip()
-            with c2:
-                st.write("")
-                add_co_submitted = st.form_submit_button("Add", type="primary")
+            # Stacked, not side-by-side (2026-08-16) — the old [6, 1]
+            # column split wrapped "Add" onto two lines ("Ad"/"d") once
+            # this form's width got capped to match the header; full-width
+            # rows top-to-bottom fit that width comfortably instead (same
+            # fix already applied to the Retrieve form).
+            new_ticker = st.text_input("Add a company to this tracker",
+                                        placeholder="e.g. TITAN, or a numeric BSE code for SME names").strip()
+            add_co_submitted = st.form_submit_button("Add", type="primary", use_container_width=True)
     if add_co_submitted and new_ticker:
         with st.spinner(f"Fetching {new_ticker} from Screener.in…"):
             data, err = fetch_one(new_ticker.upper(), get_session_id())
@@ -1294,7 +1419,7 @@ def render_projections_grid(stock, ticker, scenarios):
             year = last_year + i + 1
             for c, case in enumerate(GRID_CASES):
                 cols[col_index(i, c)].markdown(
-                    f"<div style='text-align:center;font-size:10px;line-height:1.3;'>"
+                    f"<div style='text-align:center;font-size:11.5px;line-height:1.3;'>"
                     f"<b>FY{year}</b><br><span style='color:{CASE_COLOR[case]};font-weight:700;'>"
                     f"{CASE_LABEL[case].replace(' Case', '')}</span></div>", unsafe_allow_html=True)
 
@@ -1315,7 +1440,11 @@ def render_projections_grid(stock, ticker, scenarios):
             for c, case in enumerate(GRID_CASES):
                 v = models[case][i][field]
                 cols[col_index(i, c)].markdown(
-                    f"<div style='text-align:center;color:var(--vl-muted);font-style:italic;font-size:12px;'>"
+                    # 13.5px → 16px (2026-08-16, "increase revenue pat
+                    # eps font size" — a further bump on top of the
+                    # earlier 12px→13.5px pass, now matching/slightly
+                    # above the number_input rows' 15px).
+                    f"<div style='text-align:center;color:var(--vl-muted);font-style:italic;font-size:16px;'>"
                     f"{fmt(v, digits, suffix)}</div>", unsafe_allow_html=True)
 
     # Keyed container so the FY-separator CSS rule (nth-child on this
@@ -1338,9 +1467,36 @@ def render_projections_grid(stock, ticker, scenarios):
         pe_cols[0].markdown("**PE Multiple**")
         for i in range(N_EST_YEARS):
             for c, case in enumerate(GRID_CASES):
+                # PE mirrors Revenue Growth % live until the user types
+                # their own PE (2026-08-16: "when user sets growth to
+                # revenue PE should take same number" — a PEG-of-1
+                # starting point, e.g. 25% growth → 25.0x, that a user is
+                # still free to override). Can't do this with a plain
+                # `value=` kwarg — Streamlit only honours `value` on a
+                # widget's very first mount in a session, so typing
+                # Revenue Growth % on year 2 after year 1 already exists
+                # wouldn't budge an already-rendered PE box. Instead we
+                # pre-seed st.session_state[pe_key] ourselves before the
+                # widget's created, tracking our own last-auto-set value
+                # (pe_auto_key) to tell "still on auto" apart from "user
+                # typed something, possibly identical by coincidence,
+                # leave it alone from now on" on every subsequent rerun.
+                pe_key = f"{ticker}_{case}_pe_{i}"
+                pe_auto_key = f"{ticker}_{case}_pe_auto_{i}"
+                auto_pe = effective[case][i]["revGrowth"]
+                if pe_key not in st.session_state:
+                    # First render this session — respect a genuinely
+                    # saved/manual PE (don't clobber a deliberate choice
+                    # just because a fresh page load re-seeds session
+                    # state); only fall back to mirroring growth when
+                    # nothing was saved at all.
+                    saved_pe = case_states[case]["drivers"][i].get("pe")
+                    st.session_state[pe_key] = saved_pe if saved_pe is not None else auto_pe
+                elif st.session_state[pe_key] == st.session_state.get(pe_auto_key):
+                    st.session_state[pe_key] = auto_pe
+                st.session_state[pe_auto_key] = auto_pe
                 with pe_cols[col_index(i, c)]:
-                    st.number_input("PE Multiple", value=as_float(case_states[case]["drivers"][i].get("pe")),
-                                     step=0.5, format="%.1f", key=f"{ticker}_{case}_pe_{i}",
+                    st.number_input("PE Multiple", step=0.5, format="%.1f", key=pe_key,
                                      label_visibility="collapsed", placeholder="PE")
 
         cagr_cols = st.columns(grid_widths)
@@ -1352,10 +1508,20 @@ def render_projections_grid(stock, ticker, scenarios):
                 pe_val = st.session_state.get(f"{ticker}_{case}_pe_{i}")
                 share_price = eps * pe_val if eps is not None and pe_val else None
                 cagr = cagr_for(stock["current_price"], share_price, days_until(year))
-                sub = f"₹{fmt(share_price)}" if share_price is not None else ""
+                # Bigger + share price dropped (2026-08-16, "increase the
+                # font in this table, and mainly CAGR, remove share price
+                # below CAGR value") — this is the grid's headline number,
+                # share price is still visible via the chips near the top
+                # of the page, so no information's actually lost.
                 with cagr_cols[col_index(i, c)]:
-                    st.markdown(f"<div style='text-align:center;font-size:11px;'>{cagr_html(cagr, sub)}</div>",
-                                unsafe_allow_html=True)
+                    if cagr is None:
+                        st.markdown('<div style="text-align:center;"><span class="vl-sub">—</span></div>',
+                                    unsafe_allow_html=True)
+                    else:
+                        cls = "vl-pos" if cagr >= 0 else "vl-neg"
+                        st.markdown(f'<div style="text-align:center;"><span class="{cls}" '
+                                    f'style="font-size:19px;font-weight:700;">{fmt_signed(cagr, 1)}</span></div>',
+                                    unsafe_allow_html=True)
 
     st.markdown('<div style="font-size:11px;color:var(--vl-faint);margin-top:6px;">'
                 'plain = editable estimate (carried forward by default) · <i>italic</i> = auto-computed</div>',
@@ -1396,16 +1562,25 @@ def render_projections_grid(stock, ticker, scenarios):
 # ───────────────────────── Retrieve ─────────────────────────
 
 def section_retrieve(all_stocks):
-    st.divider()
-    st.subheader("📥 Retrieve from Screener")
+    # Pinned top-right beside the title instead of sitting at the bottom
+    # of the page below the whole stock table (2026-08-16, "move to top
+    # right corner") — caller (main()) puts this in the narrow column of
+    # a st.columns([3, 1]) row, so no divider needed above it here anymore.
+    # Width also capped to ~its own subheader's rendered width (~370px;
+    # 430px leaves breathing room), same treatment as the password gate
+    # and Guidance Tracker's Add-company form ("set width as per header
+    # for adding company... for this field as well").
+    st.markdown('<style>.st-key-vl_retrieve_form { max-width: 430px; }</style>', unsafe_allow_html=True)
+    with st.container(key="vl_retrieve_form"):
+        st.subheader("📥 Retrieve from Screener")
 
-    with st.form("retrieve_form", clear_on_submit=True):
-        col1, col2 = st.columns([4, 1])
-        with col1:
+        with st.form("retrieve_form", clear_on_submit=True):
+            # Stacked, not side-by-side (2026-08-16) — the old [4, 1]
+            # column split wrapped "Retrieve" onto two lines once this
+            # form moved into the narrow top-right column; full-width
+            # rows top-to-bottom fit that width comfortably instead.
             new_ticker = st.text_input("NSE/BSE ticker or company name",
                                         placeholder="e.g. TITAN, or a numeric BSE code for SME names").strip()
-        with col2:
-            st.write("")
             submitted = st.form_submit_button("Retrieve", type="primary", use_container_width=True)
 
     if submitted and new_ticker:
@@ -1421,6 +1596,20 @@ def section_retrieve(all_stocks):
             raw = load_raw_all_stocks()
             raw[data["ticker"]] = data
             save_all_stocks(raw)
+            # Also added to the Guidance Tracker's own row list (2026-08-16
+            # request: "if a company is added to summary screen, same
+            # should be available on management guidance tracker page
+            # also") — reverses the earlier "tracked list is deliberately
+            # separate" design (see load_guidance_tracker()'s docstring);
+            # a Retrieve here now mirrors exactly what that page's own Add
+            # a company form already does. Still one-directional by
+            # construction: removing a company from the tracker (its own
+            # 🗑️) doesn't touch this page's list, only the reverse.
+            tracker = load_guidance_tracker()
+            tracked = tracker.setdefault("tracked", [])
+            if data["ticker"] not in tracked:
+                tracked.append(data["ticker"])
+                save_guidance_tracker(tracker)
             st.success(f"Retrieved **{data['name']}** ({data['ticker']}) — price ₹{fmt(data['current_price'])}, "
                        f"PE {fmt(data['pe_ratio'], 1)}x.")
             st.session_state["_jump_to"] = data["ticker"]
@@ -1436,8 +1625,6 @@ def main():
     if not check_password():
         return
 
-    st.title("🧮 Valuation Ledger")
-
     maybe_auto_refresh()  # before load_all_stocks(), so a same-day refresh renders fresh, not stale
 
     all_stocks = load_all_stocks()
@@ -1445,16 +1632,26 @@ def main():
     jump_to = st.session_state.get("_jump_to")
 
     if jump_to and jump_to in all_stocks:
+        st.title("🧮 Valuation Ledger")
         page_detail(all_stocks[jump_to], jump_to, scenarios)
         return
 
     if st.session_state.get("_view") == "guidance_tracker":
+        st.title("🧮 Valuation Ledger")
         page_guidance_tracker(all_stocks)
         return
 
-    st.caption("Summary — retrieve companies live from Screener.in")
+    # Summary page only: title/caption share the top row with Retrieve
+    # instead of Retrieve sitting at the very bottom of the page below the
+    # whole stock table (2026-08-16, "move to top right corner").
+    title_col, retrieve_col = st.columns([3, 1])
+    with title_col:
+        st.title("🧮 Valuation Ledger")
+        st.caption("Summary — retrieve companies live from Screener.in")
+    with retrieve_col:
+        section_retrieve(all_stocks)
+
     page_summary(all_stocks, scenarios)
-    section_retrieve(all_stocks)
 
 
 if __name__ == "__main__":
