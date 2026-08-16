@@ -91,6 +91,18 @@ def check_password():
     if st.session_state.get("authenticated"):
         return True
 
+    # Login screen only — shrinks the page's default side padding (which
+    # scales up to ~80px/side on wide screens, same as every other page)
+    # so the password field reads as edge-to-edge rather than inset like
+    # normal page content (2026-08-16, "still password [field] not wide
+    # enough" after the first pass already matched normal content width).
+    # Injected only on this branch (never reached once authenticated), so
+    # it can't leak into the rest of the app's layout on a later rerun.
+    st.markdown("""<style>
+      [data-testid="stMainBlockContainer"] { max-width: 100% !important;
+        padding-left: 1.5rem !important; padding-right: 1.5rem !important; }
+    </style>""", unsafe_allow_html=True)
+
     st.title("🧮 Valuation Ledger")
     # st.form (not a bare text_input + button) so pressing Enter inside the
     # password field submits it — Streamlit forms submit on Enter from any
