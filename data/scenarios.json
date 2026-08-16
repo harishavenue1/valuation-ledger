@@ -648,5 +648,42 @@
       ],
       "assumptions": ""
     }
+  },
+  "MCX": {
+    "bull": {
+      "drivers": [
+        {
+          "revGrowth": 40.0,
+          "opm": 71.0,
+          "tax": 21.0,
+          "other_income": 127.0,
+          "interest": 0.0,
+          "depreciation": 78.0,
+          "shares": 25.507,
+          "pe": 40.0
+        },
+        {
+          "revGrowth": 25.0,
+          "opm": 71.0,
+          "tax": 21.0,
+          "other_income": 127.0,
+          "interest": 0.0,
+          "depreciation": 78.0,
+          "shares": 25.507,
+          "pe": 25.0
+        },
+        {
+          "revGrowth": 25.0,
+          "opm": 71.0,
+          "tax": 21.0,
+          "other_income": 127.0,
+          "interest": 0.0,
+          "depreciation": 78.0,
+          "shares": 25.507,
+          "pe": 25.0
+        }
+      ],
+      "assumptions": ""
+    }
   }
 }
