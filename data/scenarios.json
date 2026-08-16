@@ -574,5 +574,42 @@
       ],
       "assumptions": ""
     }
+  },
+  "SONACOMS": {
+    "bull": {
+      "drivers": [
+        {
+          "revGrowth": 40.0,
+          "opm": 24.0,
+          "tax": 25.0,
+          "other_income": 72.0,
+          "interest": 23.0,
+          "depreciation": 288.0,
+          "shares": 61.127,
+          "pe": 40.0
+        },
+        {
+          "revGrowth": 25.0,
+          "opm": 24.0,
+          "tax": 25.0,
+          "other_income": 72.0,
+          "interest": 23.0,
+          "depreciation": 288.0,
+          "shares": 61.127,
+          "pe": 25.0
+        },
+        {
+          "revGrowth": 25.0,
+          "opm": 24.0,
+          "tax": 25.0,
+          "other_income": 72.0,
+          "interest": 23.0,
+          "depreciation": 288.0,
+          "shares": 61.127,
+          "pe": 25.0
+        }
+      ],
+      "assumptions": ""
+    }
   }
 }
