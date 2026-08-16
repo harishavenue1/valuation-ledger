@@ -30,7 +30,8 @@
     "MCX",
     "MTARTECH",
     "WINDLAS",
-    "SONACOMS"
+    "SONACOMS",
+    "MANORAMA"
   ],
   "cells": {
     "VENUSREM": {
@@ -103,6 +104,124 @@
         "tag": ""
       },
       "Quarter 3": {
+        "note": "",
+        "tag": ""
+      },
+      "Quarter 7": {
+        "note": "",
+        "tag": ""
+      }
+    },
+    "STLTECH": {
+      "Quarter 7": {
+        "note": "",
+        "tag": ""
+      }
+    },
+    "HFCL": {
+      "Quarter 7": {
+        "note": "",
+        "tag": ""
+      }
+    },
+    "APOLLO": {
+      "Quarter 7": {
+        "note": "",
+        "tag": ""
+      }
+    },
+    "RKFORGE": {
+      "Quarter 7": {
+        "note": "",
+        "tag": ""
+      }
+    },
+    "THANGAMAYL": {
+      "Quarter 7": {
+        "note": "",
+        "tag": ""
+      }
+    },
+    "SIGMAADV": {
+      "Quarter 7": {
+        "note": "",
+        "tag": ""
+      }
+    },
+    "KRISHNADEF": {
+      "Quarter 7": {
+        "note": "",
+        "tag": ""
+      }
+    },
+    "ANLON": {
+      "Quarter 7": {
+        "note": "",
+        "tag": ""
+      }
+    },
+    "SAKAR": {
+      "Quarter 7": {
+        "note": "",
+        "tag": ""
+      }
+    },
+    "ACE": {
+      "Quarter 7": {
+        "note": "",
+        "tag": ""
+      }
+    },
+    "TDPOWERSYS": {
+      "Quarter 7": {
+        "note": "",
+        "tag": ""
+      }
+    },
+    "BBOX": {
+      "Quarter 7": {
+        "note": "",
+        "tag": ""
+      }
+    },
+    "BECTORFOOD": {
+      "Quarter 7": {
+        "note": "",
+        "tag": ""
+      }
+    },
+    "DIVGIITTS": {
+      "Quarter 7": {
+        "note": "",
+        "tag": ""
+      }
+    },
+    "E2E": {
+      "Quarter 7": {
+        "note": "",
+        "tag": ""
+      }
+    },
+    "MCX": {
+      "Quarter 7": {
+        "note": "",
+        "tag": ""
+      }
+    },
+    "MTARTECH": {
+      "Quarter 7": {
+        "note": "",
+        "tag": ""
+      }
+    },
+    "WINDLAS": {
+      "Quarter 7": {
+        "note": "",
+        "tag": ""
+      }
+    },
+    "SONACOMS": {
+      "Quarter 7": {
         "note": "",
         "tag": ""
       }
