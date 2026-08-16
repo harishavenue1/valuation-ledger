@@ -91,25 +91,25 @@ def check_password():
     if st.session_state.get("authenticated"):
         return True
 
-    # Login screen only — shrinks the page's default side padding (which
-    # scales up to ~80px/side on wide screens, same as every other page)
-    # so the password field reads as edge-to-edge rather than inset like
-    # normal page content (2026-08-16, "still password [field] not wide
-    # enough" after the first pass already matched normal content width).
-    # Injected only on this branch (never reached once authenticated), so
-    # it can't leak into the rest of the app's layout on a later rerun.
-    st.markdown("""<style>
-      [data-testid="stMainBlockContainer"] { max-width: 100% !important;
-        padding-left: 1.5rem !important; padding-right: 1.5rem !important; }
-    </style>""", unsafe_allow_html=True)
-
     st.title("🧮 Valuation Ledger")
-    # st.form (not a bare text_input + button) so pressing Enter inside the
-    # password field submits it — Streamlit forms submit on Enter from any
-    # of their input widgets natively, no JS needed (2026-08-16 request).
-    with st.form("_pwd_form"):
-        pwd = st.text_input("Password", type="password", key="_pwd_input")
-        submitted = st.form_submit_button("Unlock")
+    # Capped to roughly the title's own rendered width (~405px, measured;
+    # 460px leaves a little breathing room) — 2026-08-16, "make it wide
+    # only for width of the valuation ledger header": reverses the two
+    # earlier passes, which stretched the field toward full page width.
+    # This keeps the whole login block visually aligned under the title
+    # instead of sprawling edge-to-edge. Injected only on this branch
+    # (never reached once authenticated), so it can't affect the main
+    # app's layout on a later rerun.
+    st.markdown('<style>.st-key-vl_pwd_form_wrap { max-width: 460px; }</style>', unsafe_allow_html=True)
+
+    with st.container(key="vl_pwd_form_wrap"):
+        # st.form (not a bare text_input + button) so pressing Enter inside
+        # the password field submits it — Streamlit forms submit on Enter
+        # from any of their input widgets natively, no JS needed
+        # (2026-08-16 request).
+        with st.form("_pwd_form"):
+            pwd = st.text_input("Password", type="password", key="_pwd_input")
+            submitted = st.form_submit_button("Unlock")
     if submitted:
         # Constant-time compare — trivial to add, avoids a timing side
         # channel on password length/prefix for what little it's worth.
