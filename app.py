@@ -196,6 +196,20 @@ def save_all_stocks(data):
                          _local_save_raw_all_stocks, "company data")
 
 
+def merge_fetched(existing, new_data):
+    """A fresh fetch_one() result is a complete replacement dict with no
+    knowledge of local-only fields this app adds on top of Screener's own
+    data — currently just "owned" (2026-08-16, "divide summary into
+    stocks I own / tracking"). Every call site that does raw[t] = data
+    after a fetch needs to go through this instead, or a Refresh silently
+    wipes the owned flag back to unset. `existing` is the ticker's prior
+    raw[t] dict if any (None for a brand-new company, which has nothing
+    to preserve)."""
+    if existing:
+        new_data = {**new_data, "owned": existing.get("owned", False)}
+    return new_data
+
+
 def load_all_stocks():
     raw = load_raw_all_stocks()
     return {ticker: clean_stock(v) for ticker, v in raw.items()}
@@ -733,6 +747,23 @@ def inject_css():
       /* Slim icon buttons (the summary row's Remove) */
       div[data-testid="stHorizontalBlock"] button[kind="secondary"] { padding: 2px 10px; }
 
+      /* Summary table's Own checkbox — centered under its "Own" header
+       * (2026-08-16, "update indentation to Own column") instead of
+       * left-anchored in its column like every Streamlit checkbox
+       * defaults to. Only checkbox in the app, so :has() scoping to it
+       * is safe unscoped by a container key. Two ancestor levels up
+       * (stVerticalBlock, stElementContainer) turned out to be the real
+       * culprit, not stCheckbox itself — both shrink-wrap to the
+       * checkbox's own ~26px by default instead of filling stColumn's
+       * full ~76px, so centering stCheckbox alone had no extra space to
+       * center within (measured: still 25px off after that first pass;
+       * DOM walk found stColumn genuinely was 76px while everything
+       * inside it, including stCheckbox, was stuck at 26px). */
+      div[data-testid="stElementContainer"]:has(div[data-testid="stCheckbox"]) {
+        width: 100% !important; display: flex !important; justify-content: center !important; }
+      div[data-testid="stVerticalBlock"]:has(div[data-testid="stCheckbox"]) {
+        width: 100% !important; align-items: center !important; }
+
       /* Summary row's company name — a tertiary st.button styled to read
          as a link (opens that company's Detail page) rather than a button,
          replacing the old standalone 🔍 icon column. */
@@ -882,7 +913,7 @@ def refresh_all_stocks(session_id, show_progress=True):
     for i, t in enumerate(tickers):
         data, err = fetch_one(t, session_id)
         if not err:
-            raw[t] = data
+            raw[t] = merge_fetched(raw.get(t), data)
         if progress:
             progress.progress((i + 1) / len(tickers), text=f"Refreshed {t}")
     save_all_stocks(raw)
@@ -925,20 +956,18 @@ def maybe_auto_refresh():
     save_last_refresh({"date": today})
 
 
-def page_summary(all_stocks, scenarios):
-    if st.button("📋 Management Guidance Tracker →", help="Track quarterly management guidance and Beat/Neutral/Miss per company"):
-        st.session_state["_view"] = "guidance_tracker"
-        st.rerun()
-
-    if not all_stocks:
-        st.markdown('<div class="vl-empty">No companies yet — retrieve one from Screener.in below.</div>',
-                    unsafe_allow_html=True)
+def render_stock_section(stocks, scenarios, section_key, empty_msg):
+    """One sortable table — Company/Price/PE/EMA%/Base/Bull/Bear/Own/🗑️ —
+    for a pre-filtered subset of all_stocks. Factored out of page_summary
+    (2026-08-16, "divide the summary to 2 parts, stocks I own and other
+    as tracking") so it can render twice, once per section, without
+    duplicating this whole block. section_key namespaces sort state and
+    every widget key so the two tables' sort/interactions never collide
+    (e.g. sorting "Stocks I Own" by Price doesn't touch "Tracking"'s
+    sort, and both can have a row with the same ticker key-safe)."""
+    if not stocks:
+        st.markdown(f'<div class="vl-empty">{empty_msg}</div>', unsafe_allow_html=True)
         return
-
-    if st.button("🔄 Refresh all now", help="Re-fetches every company below from Screener.in live"):
-        n = refresh_all_stocks(get_session_id())
-        st.success(f"Refreshed {n} companies.")
-        st.rerun()
 
     # GRID_CASES (module-level, excludes "mgmt") drives the case columns —
     # see its definition for why. EMA_COLS: signed % gap between price and
@@ -947,11 +976,12 @@ def page_summary(all_stocks, scenarios):
     # trade-off, 2026-08-16, over a second data source like yfinance that
     # has no coverage for SME/small-cap names this app otherwise supports).
     EMA_COLS = [("ema20d", "20D"), ("ema50d", "50D"), ("ema33w", "33W")]
-    col_widths = [2.2, 0.8, 0.6] + [0.5] * len(EMA_COLS) + [1.05, 1.05, 1.05, 0.55]
+    col_widths = [2.2, 0.8, 0.6] + [0.5] * len(EMA_COLS) + [1.05, 1.05, 1.05, 0.5, 0.55]
     n_ema_cols = len(EMA_COLS)
     case_start = 3 + n_ema_cols
     n_case_cols = len(GRID_CASES)
-    remove_col = case_start + n_case_cols
+    own_col = case_start + n_case_cols
+    remove_col = own_col + 1
 
     # ── Sort — every column clickable (2026-08-16 request). Sort key per
     # row is computed once up front (needed before we know render order
@@ -962,7 +992,7 @@ def page_summary(all_stocks, scenarios):
     # regardless of direction — split them out rather than relying on
     # Python's sort+reverse, which would put them first on a "desc" sort.
     rows = []
-    for ticker, stock in all_stocks.items():
+    for ticker, stock in stocks.items():
         price = stock.get("current_price")
         case_cagr, case_headline = {}, {}
         for case in GRID_CASES:
@@ -985,8 +1015,9 @@ def page_summary(all_stocks, scenarios):
             return (row["price"] - ema_val) / ema_val * 100 if row["price"] is not None and ema_val else None
         return row["case_cagr"].get(col)
 
-    sort_col = st.session_state.get("summary_sort_col")
-    sort_dir = st.session_state.get("summary_sort_dir", "asc")
+    sort_col_key, sort_dir_key = f"{section_key}_sort_col", f"{section_key}_sort_dir"
+    sort_col = st.session_state.get(sort_col_key)
+    sort_dir = st.session_state.get(sort_dir_key, "asc")
     if sort_col:
         present = [r for r in rows if sort_value(r, sort_col) is not None]
         missing = [r for r in rows if sort_value(r, sort_col) is None]
@@ -1013,18 +1044,20 @@ def page_summary(all_stocks, scenarios):
     # one at asc. use_container_width only on the EMA columns so their
     # (already-centered) button text lines up with ema_pct_html below;
     # the rest stay left-aligned, sized to their own text, like before.
-    with st.container(key="vl_summary_header"):
+    with st.container(key=f"vl_summary_header_{section_key}"):
         header = st.columns(col_widths)
         for i, (col_id, label, centered) in enumerate(header_defs):
             with header[i]:
-                if st.button(header_text(col_id, label), key=f"sort_{col_id}", type="tertiary",
+                if st.button(header_text(col_id, label), key=f"{section_key}_sort_{col_id}", type="tertiary",
                              use_container_width=centered):
                     if sort_col == col_id:
-                        st.session_state["summary_sort_dir"] = "desc" if sort_dir == "asc" else "asc"
+                        st.session_state[sort_dir_key] = "desc" if sort_dir == "asc" else "asc"
                     else:
-                        st.session_state["summary_sort_col"] = col_id
-                        st.session_state["summary_sort_dir"] = "asc"
+                        st.session_state[sort_col_key] = col_id
+                        st.session_state[sort_dir_key] = "asc"
                     st.rerun()
+        header[own_col].markdown('<div style="text-align:center;font-size:11px;color:var(--vl-faint);">Own</div>',
+                                  unsafe_allow_html=True)
         header[remove_col].write("")  # Remove column — no header, not sortable
     st.markdown('<hr style="margin:2px 0 8px;border-color:var(--vl-border);">', unsafe_allow_html=True)
 
@@ -1034,7 +1067,8 @@ def page_summary(all_stocks, scenarios):
         # Name itself opens the Detail page (replaces the old standalone 🔍
         # icon column, 2026-08-15) — styled via the tertiary-button CSS
         # above to read as a link, not a button.
-        if cols[0].button(stock["name"], key=f"open_{ticker}", type="tertiary", help=f"Open {stock['name']}"):
+        if cols[0].button(stock["name"], key=f"{section_key}_open_{ticker}", type="tertiary",
+                           help=f"Open {stock['name']}"):
             st.session_state["_jump_to"] = ticker
             st.rerun()
         cols[0].markdown(f"<span class='vl-sub' style='display:block;margin-top:-10px;'>{ticker}</span>",
@@ -1046,11 +1080,61 @@ def page_summary(all_stocks, scenarios):
         for i, case in enumerate(GRID_CASES):
             cols[case_start + i].markdown(case_summary_cell_html(row["case_headline"][case]),
                                            unsafe_allow_html=True)
-        if cols[remove_col].button("🗑️", key=f"remove_{ticker}", help=f"Remove {stock['name']} from tracking", use_container_width=True):
+        # Own checkbox — moves the row to the other section on next rerun
+        # (2026-08-16 request). Only writes back when it actually changed,
+        # same one-shot-then-rerun pattern as every other edit in this
+        # app; the checkbox's own key namespaces by section+ticker so a
+        # stale widget in the "wrong" section (from before a toggle moved
+        # this row) can't leak its value in.
+        with cols[own_col]:
+            owned_now = st.checkbox("Own", value=stock.get("owned", False),
+                                     key=f"{section_key}_own_{ticker}_cb", label_visibility="collapsed")
+        if owned_now != stock.get("owned", False):
+            raw = load_raw_all_stocks()
+            if ticker in raw:
+                raw[ticker]["owned"] = owned_now
+                save_all_stocks(raw)
+            st.rerun()
+        if cols[remove_col].button("🗑️", key=f"{section_key}_remove_{ticker}",
+                                    help=f"Remove {stock['name']} from tracking", use_container_width=True):
             raw = load_raw_all_stocks()
             raw.pop(ticker, None)
             save_all_stocks(raw)
             st.rerun()
+
+
+def page_summary(all_stocks, scenarios):
+    if st.button("📋 Management Guidance Tracker →", help="Track quarterly management guidance and Beat/Neutral/Miss per company"):
+        st.session_state["_view"] = "guidance_tracker"
+        st.rerun()
+
+    if not all_stocks:
+        st.markdown('<div class="vl-empty">No companies yet — retrieve one from Screener.in below.</div>',
+                    unsafe_allow_html=True)
+        return
+
+    if st.button("🔄 Refresh all now", help="Re-fetches every company below from Screener.in live"):
+        n = refresh_all_stocks(get_session_id())
+        st.success(f"Refreshed {n} companies.")
+        st.rerun()
+
+    # Split into two independently-sortable tables (2026-08-16, "divide
+    # the summary to 2 parts, stocks I own and other as tracking") —
+    # "owned" is a local-only flag (not from Screener), toggled per-row
+    # via the Own checkbox in render_stock_section and preserved across
+    # refreshes by merge_fetched(). Ordering preserved within each half
+    # (dict insertion order from all_stocks, same as before the split).
+    owned_stocks = {t: s for t, s in all_stocks.items() if s.get("owned")}
+    tracking_stocks = {t: s for t, s in all_stocks.items() if not s.get("owned")}
+
+    st.subheader(f"📦 Stocks I Own ({len(owned_stocks)})")
+    render_stock_section(owned_stocks, scenarios, "owned",
+                          "No owned stocks yet — check the Own box on a company below to move it here.")
+
+    st.divider()
+
+    st.subheader(f"🔭 Tracking ({len(tracking_stocks)})")
+    render_stock_section(tracking_stocks, scenarios, "tracking", "Nothing being tracked right now.")
 
 
 # ───────────────────────── Management Guidance Tracker page ─────────────────────────
@@ -1104,7 +1188,7 @@ def page_guidance_tracker(all_stocks):
             st.error(f"Couldn't fetch **{new_ticker}**: {err}")
         else:
             raw = load_raw_all_stocks()
-            raw[data["ticker"]] = data
+            raw[data["ticker"]] = merge_fetched(raw.get(data["ticker"]), data)
             save_all_stocks(raw)
             if data["ticker"] not in tracked:
                 tracked.append(data["ticker"])
@@ -1295,7 +1379,7 @@ def page_detail(stock, ticker, scenarios):
             st.error(err)
         else:
             raw = load_raw_all_stocks()
-            raw[ticker] = data
+            raw[ticker] = merge_fetched(raw.get(ticker), data)
             save_all_stocks(raw)
             st.success("Refreshed.")
             st.rerun()
@@ -1599,7 +1683,7 @@ def section_retrieve(all_stocks):
             # different symbol/code than what was typed, and the storage
             # key needs to be the real symbol for later refreshes to work.
             raw = load_raw_all_stocks()
-            raw[data["ticker"]] = data
+            raw[data["ticker"]] = merge_fetched(raw.get(data["ticker"]), data)
             save_all_stocks(raw)
             # Also added to the Guidance Tracker's own row list (2026-08-16
             # request: "if a company is added to summary screen, same
