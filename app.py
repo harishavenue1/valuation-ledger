@@ -640,12 +640,18 @@ def inject_css():
        * context — only the outer container does.
        *
        * 2026-08-16 (later same day): the grid now paginates quarters
-       * 3-at-a-time ("slides", see page_guidance_tracker's PAGE_SIZE) so
-       * horizontal scroll is now the fallback, not the norm — bumped
-       * every fixed width up (200→220, 260→340, 55→60) and the note
-       * st.text_area's height (see the row-render loop) since 3 visible
-       * columns leaves plenty of spare width/height that used to need
-       * rationing across however many quarters had piled up. */
+       * 3-at-a-time ("slides", see page_guidance_tracker's PAGE_SIZE), so
+       * horizontal scroll is now the fallback, not the norm — bumped the
+       * note st.text_area's height (see the row-render loop) since 3
+       * visible columns leaves plenty of spare height that used to need
+       * rationing across however many quarters had piled up.
+       *
+       * 2026-08-16 (yet later same day, "increase width of columns as we
+       * enough space on the page"): quarter columns switched from a fixed
+       * px width to flex: 1 1 0 — they now stretch to fill whatever's
+       * left after Company/➕'s fixed widths, instead of leaving a dead
+       * gap on wide screens. min-width keeps them readable and is what
+       * triggers the horizontal-scroll fallback on narrow ones. */
       .st-key-vl_guidance_grid { overflow-x: auto; padding-bottom: 10px; }
       .st-key-vl_guidance_grid div[data-testid="stHorizontalBlock"] { flex-wrap: nowrap; min-width: max-content; }
       .st-key-vl_guidance_grid div[data-testid="stHorizontalBlock"] > div:first-child {
@@ -653,7 +659,19 @@ def inject_css():
       .st-key-vl_guidance_grid div[data-testid="stHorizontalBlock"] > div:last-child {
         flex: 0 0 auto !important; width: 60px !important; min-width: 60px !important; }
       .st-key-vl_guidance_grid div[data-testid="stHorizontalBlock"] > div:not(:first-child):not(:last-child) {
-        flex: 0 0 auto !important; width: 340px !important; min-width: 340px !important; }
+        flex: 1 1 0 !important; min-width: 340px !important; }
+
+      /* Guidance Tracker's Add-company button and Older/Newer pager
+       * (2026-08-16, "reduce the size of buttons") — both used to
+       * stretch full-width via use_container_width/wide columns; these
+       * are small, secondary controls so they now size to their text
+       * instead. Newer's column right-aligns it to sit under the ➕ side
+       * of the grid rather than hugging the middle label. */
+      .st-key-vl_gt_add_company button,
+      .st-key-vl_gt_nav button {
+        padding: 4px 16px !important; font-size: 13px !important; width: auto !important; }
+      .st-key-vl_gt_nav div[data-testid="stHorizontalBlock"] > div:last-child {
+        display: flex !important; justify-content: flex-end !important; }
 
       /* Slim icon buttons (the summary row's Remove) */
       div[data-testid="stHorizontalBlock"] button[kind="secondary"] { padding: 2px 10px; }
@@ -924,14 +942,19 @@ def page_guidance_tracker(all_stocks):
 
     # ── Add a company (fetches into the shared all_stocks.json, same as
     # Retrieve on Summary — only this page's "tracked" membership is new) ──
-    with st.form("gt_add_company", clear_on_submit=True):
-        c1, c2 = st.columns([4, 1])
-        with c1:
-            new_ticker = st.text_input("Add a company to this tracker",
-                                        placeholder="e.g. TITAN, or a numeric BSE code for SME names").strip()
-        with c2:
-            st.write("")
-            add_co_submitted = st.form_submit_button("Add", type="primary", use_container_width=True)
+    # Keyed container (2026-08-16, "reduce the size of buttons") so the Add
+    # button shrinks to its text instead of stretching the full column —
+    # scoped to this container so it can't touch the Retrieve form's own
+    # primary button on the Summary page, which stays full-width on purpose.
+    with st.container(key="vl_gt_add_company"):
+        with st.form("gt_add_company", clear_on_submit=True):
+            c1, c2 = st.columns([6, 1])
+            with c1:
+                new_ticker = st.text_input("Add a company to this tracker",
+                                            placeholder="e.g. TITAN, or a numeric BSE code for SME names").strip()
+            with c2:
+                st.write("")
+                add_co_submitted = st.form_submit_button("Add", type="primary")
     if add_co_submitted and new_ticker:
         with st.spinner(f"Fetching {new_ticker} from Screener.in…"):
             data, err = fetch_one(new_ticker.upper(), get_session_id())
@@ -974,20 +997,23 @@ def page_guidance_tracker(all_stocks):
     visible_quarters = quarters[slide_start:slide_start + PAGE_SIZE]
 
     if total_slides > 1:
-        nav = st.columns([1, 3, 1])
-        with nav[0]:
-            if st.button("◀ Older", key="gt_slide_prev", disabled=slide == 0, use_container_width=True):
-                st.session_state["gt_slide"] = slide - 1
-                st.rerun()
-        with nav[1]:
-            st.markdown(f"<div style='text-align:center;color:var(--vl-muted);padding-top:6px;'>"
-                        f"Quarters {slide_start + 1}–{min(slide_start + PAGE_SIZE, len(quarters))} of "
-                        f"{len(quarters)}</div>", unsafe_allow_html=True)
-        with nav[2]:
-            if st.button("Newer ▶", key="gt_slide_next", disabled=slide >= total_slides - 1,
-                         use_container_width=True):
-                st.session_state["gt_slide"] = slide + 1
-                st.rerun()
+        # Keyed container, same reason as vl_gt_add_company above — Older/
+        # Newer read as small paging controls, not full-width action
+        # buttons, so they no longer stretch to fill their column.
+        with st.container(key="vl_gt_nav"):
+            nav = st.columns([1, 3, 1])
+            with nav[0]:
+                if st.button("◀ Older", key="gt_slide_prev", disabled=slide == 0):
+                    st.session_state["gt_slide"] = slide - 1
+                    st.rerun()
+            with nav[1]:
+                st.markdown(f"<div style='text-align:center;color:var(--vl-muted);padding-top:6px;'>"
+                            f"Quarters {slide_start + 1}–{min(slide_start + PAGE_SIZE, len(quarters))} of "
+                            f"{len(quarters)}</div>", unsafe_allow_html=True)
+            with nav[2]:
+                if st.button("Newer ▶", key="gt_slide_next", disabled=slide >= total_slides - 1):
+                    st.session_state["gt_slide"] = slide + 1
+                    st.rerun()
 
     # Fixed pixel widths + horizontal scroll (explicit request, 2026-08-16:
     # "set the width to each quarter to at least sizeable to write and
