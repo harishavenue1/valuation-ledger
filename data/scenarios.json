@@ -796,5 +796,42 @@
       ],
       "assumptions": ""
     }
+  },
+  "TDPOWERSYS": {
+    "bull": {
+      "drivers": [
+        {
+          "revGrowth": 40.0,
+          "opm": 18.0,
+          "tax": 27.0,
+          "other_income": 21.0,
+          "interest": 8.0,
+          "depreciation": 23.0,
+          "shares": 15.641,
+          "pe": 40.0
+        },
+        {
+          "revGrowth": 25.0,
+          "opm": 18.0,
+          "tax": 27.0,
+          "other_income": 21.0,
+          "interest": 8.0,
+          "depreciation": 23.0,
+          "shares": 15.641,
+          "pe": 25.0
+        },
+        {
+          "revGrowth": 25.0,
+          "opm": 18.0,
+          "tax": 27.0,
+          "other_income": 21.0,
+          "interest": 8.0,
+          "depreciation": 23.0,
+          "shares": 15.641,
+          "pe": 25.0
+        }
+      ],
+      "assumptions": ""
+    }
   }
 }
