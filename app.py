@@ -1315,28 +1315,42 @@ def render_stock_section(stocks, scenarios, section_key, empty_msg):
 
 
 def page_summary(all_stocks, scenarios):
-    if st.button("📋 Management Guidance Tracker →", help="Track quarterly management guidance and Beat/Neutral/Miss per company"):
-        st.session_state["_view"] = "guidance_tracker"
-        st.rerun()
-
     if not all_stocks:
+        if st.button("📋 Management Guidance Tracker →",
+                      help="Track quarterly management guidance and Beat/Neutral/Miss per company"):
+            st.session_state["_view"] = "guidance_tracker"
+            st.rerun()
         st.markdown('<div class="vl-empty">No companies yet — retrieve one from Screener.in below.</div>',
                     unsafe_allow_html=True)
         return
 
+    # All 3 action buttons in ONE row, sized to their own text and packed
+    # left (2026-08-16, "buttons are at random places.. can we improve
+    # ui styles") — previously Guidance Tracker sat alone as a bare
+    # full-width element, then a separate st.columns([1, 1]) row below it
+    # split the *entire* page width in half for just two buttons, landing
+    # "Refresh all now" oddly out at the page's horizontal center instead
+    # of next to its sibling. A narrow ratio per button (sized ~to its
+    # own label) plus one trailing spacer column reads as one deliberate
+    # button bar instead of three independently-placed elements.
+    btn_col1, btn_col2, btn_col3, _spacer = st.columns([1.7, 1.3, 1.1, 3.4])
+    with btn_col1:
+        if st.button("📋 Management Guidance Tracker →",
+                      help="Track quarterly management guidance and Beat/Neutral/Miss per company"):
+            st.session_state["_view"] = "guidance_tracker"
+            st.rerun()
     # Two separate refresh actions (2026-08-16, "2 refresh for
     # fundamental data & prices alone, as prices do need daily updates")
     # — Prices is the fast/cheap one (~half the requests per company,
     # see fetch_price_only()) for something that's genuinely stale by
     # the next trading session; Fundamentals (P&L/Quarterly Results/EMA)
     # doesn't change day to day so it stays a deliberate, separate action.
-    refresh_col1, refresh_col2 = st.columns([1, 1])
-    with refresh_col1:
+    with btn_col2:
         if st.button("💹 Refresh prices only", help="Fast — price/PE/market cap/52W high only, no P&L/quarterly/EMA"):
             n = refresh_prices_only(get_session_id())
             st.success(f"Refreshed prices for {n} companies.")
             st.rerun()
-    with refresh_col2:
+    with btn_col3:
         if st.button("🔄 Refresh all now", help="Full refresh — re-fetches P&L, Quarterly Results, and EMAs too (slower)"):
             n = refresh_all_stocks(get_session_id())
             st.success(f"Refreshed {n} companies.")
