@@ -759,5 +759,42 @@
       ],
       "assumptions": ""
     }
+  },
+  "STLTECH": {
+    "bull": {
+      "drivers": [
+        {
+          "revGrowth": 50.0,
+          "opm": 12.0,
+          "tax": 48.0,
+          "other_income": 75.0,
+          "interest": 224.0,
+          "depreciation": 313.0,
+          "shares": 48.696,
+          "pe": 50.0
+        },
+        {
+          "revGrowth": 25.0,
+          "opm": 12.0,
+          "tax": 48.0,
+          "other_income": 75.0,
+          "interest": 224.0,
+          "depreciation": 313.0,
+          "shares": 48.696,
+          "pe": 25.0
+        },
+        {
+          "revGrowth": 25.0,
+          "opm": 12.0,
+          "tax": 48.0,
+          "other_income": 75.0,
+          "interest": 224.0,
+          "depreciation": 313.0,
+          "shares": 48.696,
+          "pe": 25.0
+        }
+      ],
+      "assumptions": ""
+    }
   }
 }
