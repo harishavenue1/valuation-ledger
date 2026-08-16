@@ -6993,7 +6993,8 @@
       14.4,
       16.33
     ],
-    "fetched_at": "2026-08-16 14:25:47"
+    "fetched_at": "2026-08-16 14:25:47",
+    "owned": true
   },
   "WINDLAS": {
     "ticker": "WINDLAS",
