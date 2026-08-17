@@ -3128,9 +3128,9 @@
     "name": "Sigma Advanced System Ltd",
     "base_url": "/company/SIGMAADV",
     "consolidated": true,
-    "current_price": 660.0,
-    "pe_ratio": 75.4,
-    "market_cap_cr": 12537.0,
+    "current_price": 627.0,
+    "pe_ratio": 71.6,
+    "market_cap_cr": 11906.0,
     "week52_high": 726.0,
     "ema20d": 639.8105060002945,
     "ema50d": 560.9734037612315,
@@ -3500,7 +3500,7 @@
       7.29,
       1.36
     ],
-    "fetched_at": "2026-08-16 13:37:28",
+    "fetched_at": "2026-08-17 05:35:17",
     "owned": true
   },
   "KRISHNADEF": {
