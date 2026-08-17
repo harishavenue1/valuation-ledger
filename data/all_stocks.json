@@ -4,9 +4,9 @@
     "name": "Kwality Pharmaceuticals Ltd",
     "base_url": "/company/KPL",
     "consolidated": true,
-    "current_price": 3630.0,
-    "pe_ratio": 46.2,
-    "market_cap_cr": 3767.0,
+    "current_price": 3625.0,
+    "pe_ratio": 46.1,
+    "market_cap_cr": 3761.0,
     "week52_high": 3690.0,
     "ema20d": 2892.6097415277372,
     "ema50d": 2627.888895559564,
@@ -376,7 +376,7 @@
       24.38,
       24.69
     ],
-    "fetched_at": "2026-08-17 05:34:49",
+    "fetched_at": "2026-08-17 05:38:11",
     "owned": true
   },
   "VENUSREM": {
