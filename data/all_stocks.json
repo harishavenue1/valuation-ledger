@@ -1688,13 +1688,13 @@
     "name": "HFCL Ltd",
     "base_url": "/company/HFCL",
     "consolidated": true,
-    "current_price": 223.0,
-    "pe_ratio": 59.5,
-    "market_cap_cr": 34071.0,
+    "current_price": 220.0,
+    "pe_ratio": 58.6,
+    "market_cap_cr": 33583.0,
     "week52_high": 231.0,
-    "ema20d": 210.3381216309964,
-    "ema50d": 197.26506573420178,
-    "ema33w": 148.834856934474,
+    "ema20d": 211.2106814756634,
+    "ema50d": 198.13702394070367,
+    "ema33w": 152.99163005597552,
     "years": [
       "Mar 2015",
       "Mar 2016",
@@ -2060,7 +2060,8 @@
       1.17,
       1.49
     ],
-    "fetched_at": "2026-08-17 05:38:28",
+    "fetched_at": "2026-08-17 14:25:20",
+    "fundamentals_fetched_at": "2026-08-17 14:25:20",
     "owned": true
   },
   "APOLLO": {
