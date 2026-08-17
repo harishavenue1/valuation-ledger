@@ -5535,13 +5535,13 @@
     "name": "Mrs Bectors Food Specialities Ltd",
     "base_url": "/company/BECTORFOOD",
     "consolidated": true,
-    "current_price": 244.0,
-    "pe_ratio": 50.3,
-    "market_cap_cr": 7480.0,
+    "current_price": 255.0,
+    "pe_ratio": 52.7,
+    "market_cap_cr": 7840.0,
     "week52_high": 318.0,
-    "ema20d": 218.2914250756949,
-    "ema50d": 203.04432365897438,
-    "ema33w": 207.13938250005148,
+    "ema20d": 221.81605125896203,
+    "ema50d": 205.09356586842637,
+    "ema33w": 209.97236000004847,
     "years": [
       "Mar 2018",
       "Mar 2019",
@@ -5862,7 +5862,9 @@
       1.15,
       1.26
     ],
-    "fetched_at": "2026-08-17 05:39:02"
+    "fetched_at": "2026-08-17 14:26:19",
+    "fundamentals_fetched_at": "2026-08-17 14:26:19",
+    "owned": false
   },
   "DIVGIITTS": {
     "ticker": "DIVGIITTS",
