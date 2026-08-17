@@ -5871,13 +5871,13 @@
     "name": "Divgi Torqtransfer Systems Ltd",
     "base_url": "/company/DIVGIITTS",
     "consolidated": false,
-    "current_price": null,
-    "pe_ratio": null,
-    "market_cap_cr": null,
-    "week52_high": null,
-    "ema20d": 1052.8976356501398,
-    "ema50d": 957.0893077777738,
-    "ema33w": 822.2778509693354,
+    "current_price": 1284.0,
+    "pe_ratio": 62.1,
+    "market_cap_cr": 3927.0,
+    "week52_high": 1319.0,
+    "ema20d": 1074.950241778698,
+    "ema50d": 969.926981982567,
+    "ema33w": 849.4644479711392,
     "years": [
       "Mar 2018",
       "Mar 2019",
@@ -6198,7 +6198,8 @@
       5.06,
       8.25
     ],
-    "fetched_at": "2026-08-17 05:39:06",
+    "fetched_at": "2026-08-17 14:26:26",
+    "fundamentals_fetched_at": "2026-08-17 14:26:26",
     "owned": true
   },
   "E2E": {
