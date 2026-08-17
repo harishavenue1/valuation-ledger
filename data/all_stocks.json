@@ -5154,13 +5154,13 @@
     "name": "Black Box Ltd",
     "base_url": "/company/BBOX",
     "consolidated": true,
-    "current_price": 777.0,
-    "pe_ratio": 48.3,
-    "market_cap_cr": 13799.0,
+    "current_price": 774.0,
+    "pe_ratio": 48.1,
+    "market_cap_cr": 13731.0,
     "week52_high": 1104.0,
-    "ema20d": 789.6197685767889,
-    "ema50d": 825.1241976577024,
-    "ema33w": 737.7331123131216,
+    "ema20d": 788.1416953789995,
+    "ema50d": 823.1232487299494,
+    "ema33w": 739.872341000585,
     "years": [
       "Mar 2015",
       "Mar 2016",
@@ -5526,7 +5526,8 @@
       3.65,
       3.15
     ],
-    "fetched_at": "2026-08-17 05:38:59",
+    "fetched_at": "2026-08-17 14:26:14",
+    "fundamentals_fetched_at": "2026-08-17 14:26:14",
     "owned": true
   },
   "BECTORFOOD": {
