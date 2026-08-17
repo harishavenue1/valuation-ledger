@@ -7025,13 +7025,13 @@
     "name": "Windlas Biotech Ltd",
     "base_url": "/company/WINDLAS",
     "consolidated": true,
-    "current_price": 949.0,
-    "pe_ratio": 29.5,
-    "market_cap_cr": 1959.0,
+    "current_price": 933.0,
+    "pe_ratio": 29.0,
+    "market_cap_cr": 1926.0,
     "week52_high": 1098.0,
-    "ema20d": 883.7031367177592,
-    "ema50d": 859.495755238167,
-    "ema33w": 841.5395562070003,
+    "ema20d": 888.4361713160679,
+    "ema50d": 862.3939609151017,
+    "ema33w": 846.9431117242355,
     "years": [
       "Mar 2018",
       "Mar 2019",
@@ -7337,7 +7337,8 @@
       7.12,
       7.58
     ],
-    "fetched_at": "2026-08-17 05:35:54",
+    "fetched_at": "2026-08-17 14:26:47",
+    "fundamentals_fetched_at": "2026-08-17 14:26:47",
     "owned": true
   },
   "SONACOMS": {
