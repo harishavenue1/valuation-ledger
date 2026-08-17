@@ -2368,9 +2368,9 @@
     "name": "Ramkrishna Forgings Ltd",
     "base_url": "/company/RKFORGE",
     "consolidated": true,
-    "current_price": 733.0,
-    "pe_ratio": 116.0,
-    "market_cap_cr": 13346.0,
+    "current_price": 745.0,
+    "pe_ratio": 118.0,
+    "market_cap_cr": 13575.0,
     "week52_high": 764.0,
     "ema20d": 678.2020372436391,
     "ema50d": 627.6188914493997,
@@ -2740,7 +2740,7 @@
       3.08,
       2.57
     ],
-    "fetched_at": "2026-08-16 13:36:42",
+    "fetched_at": "2026-08-17 05:35:10",
     "owned": true
   },
   "THANGAMAYL": {
