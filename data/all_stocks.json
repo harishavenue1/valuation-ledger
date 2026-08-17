@@ -384,9 +384,9 @@
     "name": "Venus Remedies Ltd",
     "base_url": "/company/VENUSREM",
     "consolidated": true,
-    "current_price": 1782.0,
-    "pe_ratio": 20.5,
-    "market_cap_cr": 2382.0,
+    "current_price": 1735.0,
+    "pe_ratio": 20.0,
+    "market_cap_cr": 2319.0,
     "week52_high": 2044.0,
     "ema20d": 1636.330816800235,
     "ema50d": 1586.3948846906806,
@@ -756,7 +756,7 @@
       35.54,
       17.18
     ],
-    "fetched_at": "2026-08-16 12:10:56",
+    "fetched_at": "2026-08-17 05:34:52",
     "owned": true
   },
   "544310": {
