@@ -7657,10 +7657,10 @@
     "name": "Manorama Industries Ltd",
     "base_url": "/company/MANORAMA",
     "consolidated": true,
-    "current_price": 1737.0,
-    "pe_ratio": 42.5,
-    "market_cap_cr": 10965.0,
-    "week52_high": 1868.0,
+    "current_price": 1890.0,
+    "pe_ratio": 46.2,
+    "market_cap_cr": 11930.0,
+    "week52_high": 1890.0,
     "ema20d": 1626.6586535254191,
     "ema50d": 1580.1100069417303,
     "ema33w": 1475.6230009729913,
@@ -7879,7 +7879,7 @@
       8.79,
       13.17
     ],
-    "fetched_at": "2026-08-16 16:59:49",
+    "fetched_at": "2026-08-17 05:36:00",
     "fundamentals_fetched_at": "2026-08-16 16:59:49"
   },
   "543619": {
