@@ -3765,13 +3765,13 @@
     "name": "Anlon Technology Solutions Ltd",
     "base_url": "/company/ANLON",
     "consolidated": false,
-    "current_price": null,
-    "pe_ratio": null,
-    "market_cap_cr": null,
-    "week52_high": null,
-    "ema20d": 629.0785828205662,
-    "ema50d": 621.8011277454242,
-    "ema33w": 540.5291376576315,
+    "current_price": 676.0,
+    "pe_ratio": 36.6,
+    "market_cap_cr": 508.0,
+    "week52_high": 748.0,
+    "ema20d": 633.5806225519409,
+    "ema50d": 623.940299206388,
+    "ema33w": 548.518600148359,
     "years": [
       "Mar 2018",
       "Mar 2019",
@@ -4077,7 +4077,8 @@
       8.66,
       13.51
     ],
-    "fetched_at": "2026-08-17 05:38:47",
+    "fetched_at": "2026-08-17 14:25:53",
+    "fundamentals_fetched_at": "2026-08-17 14:25:53",
     "owned": true
   },
   "SAKAR": {
