@@ -7913,13 +7913,13 @@
     "name": "Concord Control Systems Ltd",
     "base_url": "/company/543619",
     "consolidated": true,
-    "current_price": 2414.0,
-    "pe_ratio": 59.1,
-    "market_cap_cr": 2507.0,
+    "current_price": 2338.0,
+    "pe_ratio": 57.2,
+    "market_cap_cr": 2428.0,
     "week52_high": 3070.0,
-    "ema20d": 2526.0834478934503,
-    "ema50d": 2595.299529331182,
-    "ema33w": 2450.499547092053,
+    "ema20d": 2508.1659766655025,
+    "ema50d": 2585.2073909260375,
+    "ema33w": 2443.8789854984025,
     "years": [
       "Mar 2020",
       "Mar 2021",
@@ -8195,7 +8195,8 @@
       15.86,
       23.96
     ],
-    "fetched_at": "2026-08-17 05:36:03",
-    "fundamentals_fetched_at": "2026-08-16 17:11:57"
+    "fetched_at": "2026-08-17 14:27:03",
+    "fundamentals_fetched_at": "2026-08-17 14:27:03",
+    "owned": false
   }
 }
