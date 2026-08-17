@@ -2069,13 +2069,13 @@
     "name": "Apollo Micro Systems Ltd",
     "base_url": "/company/APOLLO",
     "consolidated": true,
-    "current_price": 391.0,
-    "pe_ratio": 120.0,
-    "market_cap_cr": 14546.0,
+    "current_price": 387.0,
+    "pe_ratio": 119.0,
+    "market_cap_cr": 14419.0,
     "week52_high": 467.0,
-    "ema20d": 393.85855257102486,
-    "ema50d": 387.8466364134764,
-    "ema33w": 332.6245156536276,
+    "ema20d": 393.21011899283207,
+    "ema50d": 387.81539576981066,
+    "ema33w": 335.82601473282597,
     "years": [
       "Mar 2020",
       "Mar 2021",
@@ -2366,7 +2366,8 @@
       1.05,
       0.72
     ],
-    "fetched_at": "2026-08-17 05:38:31",
+    "fetched_at": "2026-08-17 14:25:25",
+    "fundamentals_fetched_at": "2026-08-17 14:25:25",
     "owned": false
   },
   "RKFORGE": {
