@@ -4379,9 +4379,9 @@
     "name": "Action Construction Equipment Ltd",
     "base_url": "/company/ACE",
     "consolidated": true,
-    "current_price": 1086.0,
-    "pe_ratio": 29.6,
-    "market_cap_cr": 12928.0,
+    "current_price": 1096.0,
+    "pe_ratio": 29.8,
+    "market_cap_cr": 13050.0,
     "week52_high": 1170.0,
     "ema20d": 1068.6461099186474,
     "ema50d": 1018.6006225093023,
@@ -4751,7 +4751,7 @@
       9.31,
       10.03
     ],
-    "fetched_at": "2026-08-16 13:39:01",
+    "fetched_at": "2026-08-17 05:35:29",
     "owned": true
   },
   "TDPOWERSYS": {
