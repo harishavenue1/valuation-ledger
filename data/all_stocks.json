@@ -766,13 +766,13 @@
     "name": "Yash Highvoltage Ltd",
     "base_url": "/company/544310",
     "consolidated": true,
-    "current_price": 930.0,
-    "pe_ratio": 71.4,
-    "market_cap_cr": 2779.0,
+    "current_price": 919.0,
+    "pe_ratio": 70.6,
+    "market_cap_cr": 2748.0,
     "week52_high": 1025.0,
-    "ema20d": 933.3914183340183,
-    "ema50d": 879.2914115472527,
-    "ema33w": 703.2683345537783,
+    "ema20d": 932.0493784926833,
+    "ema50d": 880.8603758003015,
+    "ema33w": 715.9760795800267,
     "years": [
       "Mar 2025",
       "Mar 2026"
@@ -917,7 +917,8 @@
       4.91,
       8.28
     ],
-    "fetched_at": "2026-08-17 05:38:18",
+    "fetched_at": "2026-08-17 14:25:04",
+    "fundamentals_fetched_at": "2026-08-17 14:25:04",
     "owned": false
   },
   "ASTRAMICRO": {
