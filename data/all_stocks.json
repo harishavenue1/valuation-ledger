@@ -4074,9 +4074,9 @@
     "name": "Sakar Healthcare Ltd",
     "base_url": "/company/SAKAR",
     "consolidated": true,
-    "current_price": 876.0,
-    "pe_ratio": 54.0,
-    "market_cap_cr": 1949.0,
+    "current_price": 870.0,
+    "pe_ratio": 53.7,
+    "market_cap_cr": 1936.0,
     "week52_high": 980.0,
     "ema20d": 890.6172909731093,
     "ema50d": 842.0222267191193,
@@ -4371,7 +4371,7 @@
       4.95,
       4.62
     ],
-    "fetched_at": "2026-08-16 13:38:45",
+    "fetched_at": "2026-08-17 05:35:26",
     "owned": true
   },
   "ACE": {
