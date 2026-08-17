@@ -6188,10 +6188,10 @@
     "name": "E2E Networks Ltd",
     "base_url": "/company/E2E",
     "consolidated": true,
-    "current_price": 667.0,
-    "pe_ratio": 440.0,
-    "market_cap_cr": 13706.0,
-    "week52_high": 667.0,
+    "current_price": 686.0,
+    "pe_ratio": 453.0,
+    "market_cap_cr": 14112.0,
+    "week52_high": 697.0,
     "ema20d": 557.9993805786081,
     "ema50d": 478.79868696707143,
     "ema33w": 374.0421449295627,
@@ -6310,7 +6310,7 @@
       0.31,
       2.13
     ],
-    "fetched_at": "2026-08-16 14:25:39",
+    "fetched_at": "2026-08-17 05:35:44",
     "owned": true
   },
   "MCX": {
