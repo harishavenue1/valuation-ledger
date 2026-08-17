@@ -6338,13 +6338,13 @@
     "name": "Multi Commodity Exchange of India Ltd",
     "base_url": "/company/MCX",
     "consolidated": true,
-    "current_price": 2945.0,
-    "pe_ratio": 48.6,
-    "market_cap_cr": 75093.0,
+    "current_price": 2933.0,
+    "pe_ratio": 48.3,
+    "market_cap_cr": 74510.0,
     "week52_high": 3480.0,
-    "ema20d": 2792.2539105564438,
-    "ema50d": 2804.781646392457,
-    "ema33w": 2610.562414294983,
+    "ema20d": 2805.6678238367826,
+    "ema50d": 2809.813738690792,
+    "ema33w": 2629.5352134541013,
     "years": [
       "Mar 2015",
       "Mar 2016",
@@ -6710,7 +6710,8 @@
       20.78,
       16.21
     ],
-    "fetched_at": "2026-08-17 05:35:48",
+    "fetched_at": "2026-08-17 14:26:36",
+    "fundamentals_fetched_at": "2026-08-17 14:26:36",
     "owned": true
   },
   "MTARTECH": {
