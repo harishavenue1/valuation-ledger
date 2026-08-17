@@ -7348,11 +7348,11 @@
     "consolidated": true,
     "current_price": 805.0,
     "pe_ratio": 69.0,
-    "market_cap_cr": 50212.0,
+    "market_cap_cr": 50202.0,
     "week52_high": 837.0,
-    "ema20d": 765.4885210428674,
-    "ema50d": 705.0411446926328,
-    "ema33w": 612.47827134518,
+    "ema20d": 769.2610428483085,
+    "ema50d": 708.9650213713531,
+    "ema33w": 623.8089612660518,
     "years": [
       "Mar 2018",
       "Mar 2019",
@@ -7673,7 +7673,9 @@
       3.09,
       2.9
     ],
-    "fetched_at": "2026-08-17 05:35:57"
+    "fetched_at": "2026-08-17 14:26:52",
+    "fundamentals_fetched_at": "2026-08-17 14:26:52",
+    "owned": false
   },
   "MANORAMA": {
     "ticker": "MANORAMA",
