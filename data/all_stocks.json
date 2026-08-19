@@ -4773,10 +4773,10 @@
     "name": "TD Power Systems Ltd",
     "base_url": "/company/TDPOWERSYS",
     "consolidated": true,
-    "current_price": 1549.0,
+    "current_price": 1546.0,
     "pe_ratio": 87.9,
-    "market_cap_cr": 24176.0,
-    "week52_high": 1571.0,
+    "market_cap_cr": 24181.0,
+    "week52_high": 1598.0,
     "ema20d": 1282.1488918472692,
     "ema50d": 1213.2195792761802,
     "ema33w": 1084.7163537096712,
@@ -5145,7 +5145,7 @@
       4.62,
       5.52
     ],
-    "fetched_at": "2026-08-17 14:26:09",
+    "fetched_at": "2026-08-19 16:24:36",
     "fundamentals_fetched_at": "2026-08-17 14:26:09",
     "owned": true
   },
