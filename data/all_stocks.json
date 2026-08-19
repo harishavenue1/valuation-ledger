@@ -3518,9 +3518,9 @@
     "name": "Krishna Defence & Allied Industries Ltd",
     "base_url": "/company/KRISHNADEF",
     "consolidated": true,
-    "current_price": 1062.0,
-    "pe_ratio": 36.7,
-    "market_cap_cr": 1588.0,
+    "current_price": 1078.0,
+    "pe_ratio": 37.2,
+    "market_cap_cr": 1611.0,
     "week52_high": 1400.0,
     "ema20d": 1177.0145653131447,
     "ema50d": 1198.8683585441586,
@@ -3756,7 +3756,7 @@
       8.58,
       7.65
     ],
-    "fetched_at": "2026-08-17 14:25:47",
+    "fetched_at": "2026-08-19 16:24:23",
     "fundamentals_fetched_at": "2026-08-17 14:25:47",
     "owned": true
   },
