@@ -4,9 +4,9 @@
     "name": "Kwality Pharmaceuticals Ltd",
     "base_url": "/company/KPL",
     "consolidated": true,
-    "current_price": 3598.0,
-    "pe_ratio": 45.6,
-    "market_cap_cr": 3725.0,
+    "current_price": 3452.0,
+    "pe_ratio": 43.9,
+    "market_cap_cr": 3586.0,
     "week52_high": 3744.0,
     "ema20d": 2959.099289953667,
     "ema50d": 2665.6481545572283,
@@ -376,7 +376,7 @@
       24.38,
       24.69
     ],
-    "fetched_at": "2026-08-17 14:24:53",
+    "fetched_at": "2026-08-19 16:23:50",
     "fundamentals_fetched_at": "2026-08-17 14:24:53",
     "owned": true
   },
