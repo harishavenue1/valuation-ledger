@@ -2071,7 +2071,7 @@
     "consolidated": true,
     "current_price": 387.0,
     "pe_ratio": 119.0,
-    "market_cap_cr": 14419.0,
+    "market_cap_cr": 14385.0,
     "week52_high": 467.0,
     "ema20d": 393.21011899283207,
     "ema50d": 387.81539576981066,
@@ -2366,7 +2366,7 @@
       1.05,
       0.72
     ],
-    "fetched_at": "2026-08-17 14:25:25",
+    "fetched_at": "2026-08-19 16:24:10",
     "fundamentals_fetched_at": "2026-08-17 14:25:25",
     "owned": false
   },
