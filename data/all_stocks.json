@@ -7346,9 +7346,9 @@
     "name": "Sona BLW Precision Forgings Ltd",
     "base_url": "/company/SONACOMS",
     "consolidated": true,
-    "current_price": 805.0,
-    "pe_ratio": 69.0,
-    "market_cap_cr": 50202.0,
+    "current_price": 824.0,
+    "pe_ratio": 70.5,
+    "market_cap_cr": 51284.0,
     "week52_high": 837.0,
     "ema20d": 769.2610428483085,
     "ema50d": 708.9650213713531,
@@ -7673,7 +7673,7 @@
       3.09,
       2.9
     ],
-    "fetched_at": "2026-08-17 14:26:52",
+    "fetched_at": "2026-08-19 16:25:01",
     "fundamentals_fetched_at": "2026-08-17 14:26:52",
     "owned": false
   },
