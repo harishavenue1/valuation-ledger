@@ -9134,10 +9134,10 @@
     "name": "Afcom Holdings Ltd",
     "base_url": "/company/544224",
     "consolidated": false,
-    "current_price": 1539.0,
-    "pe_ratio": 30.1,
-    "market_cap_cr": 4416.0,
-    "week52_high": 1587.0,
+    "current_price": null,
+    "pe_ratio": null,
+    "market_cap_cr": null,
+    "week52_high": null,
     "ema20d": 1431.451606932096,
     "ema50d": 1309.366377275496,
     "ema33w": 1100.7938327174738,
@@ -9416,7 +9416,7 @@
       17.13,
       13.67
     ],
-    "fetched_at": "2026-08-17 16:44:01",
+    "fetched_at": "2026-08-19 16:25:21",
     "fundamentals_fetched_at": "2026-08-17 16:44:01"
   }
 }
