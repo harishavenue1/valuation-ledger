@@ -2375,10 +2375,10 @@
     "name": "Ramkrishna Forgings Ltd",
     "base_url": "/company/RKFORGE",
     "consolidated": true,
-    "current_price": 755.0,
-    "pe_ratio": 120.0,
-    "market_cap_cr": 13759.0,
-    "week52_high": 764.0,
+    "current_price": 749.0,
+    "pe_ratio": 119.0,
+    "market_cap_cr": 13648.0,
+    "week52_high": 773.0,
     "ema20d": 685.5161289347211,
     "ema50d": 632.6142290396193,
     "ema33w": 597.4143198985074,
@@ -2747,7 +2747,7 @@
       3.08,
       2.57
     ],
-    "fetched_at": "2026-08-17 14:25:31",
+    "fetched_at": "2026-08-19 16:24:13",
     "fundamentals_fetched_at": "2026-08-17 14:25:31",
     "owned": true
   },
