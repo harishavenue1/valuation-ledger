@@ -3137,9 +3137,9 @@
     "name": "Sigma Advanced System Ltd",
     "base_url": "/company/SIGMAADV",
     "consolidated": true,
-    "current_price": 627.0,
-    "pe_ratio": 71.6,
-    "market_cap_cr": 11916.0,
+    "current_price": 691.0,
+    "pe_ratio": 79.0,
+    "market_cap_cr": 13137.0,
     "week52_high": 726.0,
     "ema20d": 638.5999816193141,
     "ema50d": 563.5666036137322,
@@ -3509,7 +3509,7 @@
       7.29,
       1.36
     ],
-    "fetched_at": "2026-08-17 14:25:42",
+    "fetched_at": "2026-08-19 16:24:20",
     "fundamentals_fetched_at": "2026-08-17 14:25:42",
     "owned": true
   },
