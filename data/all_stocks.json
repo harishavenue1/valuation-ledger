@@ -2756,10 +2756,10 @@
     "name": "Thangamayil Jewellery Ltd",
     "base_url": "/company/THANGAMAYL",
     "consolidated": false,
-    "current_price": 5336.0,
-    "pe_ratio": 42.2,
-    "market_cap_cr": 16583.0,
-    "week52_high": 7430.0,
+    "current_price": null,
+    "pe_ratio": null,
+    "market_cap_cr": null,
+    "week52_high": null,
     "ema20d": 5592.602168002593,
     "ema50d": 5570.681601174048,
     "ema33w": 4630.5093076529765,
@@ -3128,7 +3128,7 @@
       45.9,
       27.38
     ],
-    "fetched_at": "2026-08-17 14:25:37",
+    "fetched_at": "2026-08-19 16:24:17",
     "fundamentals_fetched_at": "2026-08-17 14:25:37",
     "owned": true
   },
