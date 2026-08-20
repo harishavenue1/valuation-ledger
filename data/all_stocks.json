@@ -6719,9 +6719,9 @@
     "name": "MTAR Technologies Ltd",
     "base_url": "/company/MTARTECH",
     "consolidated": true,
-    "current_price": 6918.0,
-    "pe_ratio": 156.0,
-    "market_cap_cr": 21263.0,
+    "current_price": 7023.0,
+    "pe_ratio": 159.0,
+    "market_cap_cr": 21602.0,
     "week52_high": 8715.0,
     "ema20d": 6658.749418128438,
     "ema50d": 6601.259159784348,
@@ -7016,7 +7016,7 @@
       14.4,
       16.33
     ],
-    "fetched_at": "2026-08-19 16:24:55",
+    "fetched_at": "2026-08-20 04:48:23",
     "fundamentals_fetched_at": "2026-08-17 14:26:42",
     "owned": true
   },
