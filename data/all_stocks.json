@@ -5154,9 +5154,9 @@
     "name": "Black Box Ltd",
     "base_url": "/company/BBOX",
     "consolidated": true,
-    "current_price": 768.0,
-    "pe_ratio": 47.7,
-    "market_cap_cr": 13622.0,
+    "current_price": 773.0,
+    "pe_ratio": 48.1,
+    "market_cap_cr": 13734.0,
     "week52_high": 1104.0,
     "ema20d": 788.1416953789995,
     "ema50d": 823.1232487299494,
@@ -5526,7 +5526,7 @@
       3.65,
       3.15
     ],
-    "fetched_at": "2026-08-19 16:24:39",
+    "fetched_at": "2026-08-20 04:48:07",
     "fundamentals_fetched_at": "2026-08-17 14:26:14",
     "owned": true
   },
