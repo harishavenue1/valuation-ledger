@@ -1307,9 +1307,9 @@
     "name": "Sterlite Technologies Ltd",
     "base_url": "/company/STLTECH",
     "consolidated": true,
-    "current_price": 621.0,
+    "current_price": 619.0,
     "pe_ratio": 135.0,
-    "market_cap_cr": 31971.0,
+    "market_cap_cr": 31811.0,
     "week52_high": 685.0,
     "ema20d": 606.7320827784084,
     "ema50d": 561.3399208699225,
@@ -1679,7 +1679,7 @@
       1.21,
       4.04
     ],
-    "fetched_at": "2026-08-19 16:24:03",
+    "fetched_at": "2026-08-20 04:47:33",
     "fundamentals_fetched_at": "2026-08-17 14:25:15",
     "owned": true
   },
