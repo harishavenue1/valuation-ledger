@@ -766,9 +766,9 @@
     "name": "Yash Highvoltage Ltd",
     "base_url": "/company/544310",
     "consolidated": true,
-    "current_price": 916.0,
-    "pe_ratio": 70.3,
-    "market_cap_cr": 2737.0,
+    "current_price": 924.0,
+    "pe_ratio": 71.0,
+    "market_cap_cr": 2761.0,
     "week52_high": 1025.0,
     "ema20d": 932.0493784926833,
     "ema50d": 880.8603758003015,
@@ -917,7 +917,7 @@
       4.91,
       8.28
     ],
-    "fetched_at": "2026-08-19 16:23:57",
+    "fetched_at": "2026-08-20 04:47:26",
     "fundamentals_fetched_at": "2026-08-17 14:25:04",
     "owned": false
   },
