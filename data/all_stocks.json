@@ -8754,9 +8754,9 @@
     "name": "Morepen Laboratories Ltd",
     "base_url": "/company/MOREPENLAB",
     "consolidated": true,
-    "current_price": 88.4,
-    "pe_ratio": 41.3,
-    "market_cap_cr": 4849.0,
+    "current_price": 91.7,
+    "pe_ratio": 42.8,
+    "market_cap_cr": 5025.0,
     "week52_high": 92.5,
     "ema20d": 71.5577630414211,
     "ema50d": 62.19839852922636,
@@ -9126,7 +9126,7 @@
       0.29,
       1.03
     ],
-    "fetched_at": "2026-08-19 16:25:17",
+    "fetched_at": "2026-08-20 04:48:45",
     "fundamentals_fetched_at": "2026-08-17 15:49:37"
   },
   "544224": {
