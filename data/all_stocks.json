@@ -8204,9 +8204,9 @@
     "name": "Supreme Power Equipment Ltd",
     "base_url": "/company/SUPREMEPWR",
     "consolidated": true,
-    "current_price": 238.0,
-    "pe_ratio": 28.5,
-    "market_cap_cr": 596.0,
+    "current_price": 232.0,
+    "pe_ratio": 27.8,
+    "market_cap_cr": 580.0,
     "week52_high": 291.0,
     "ema20d": 203.08869303443728,
     "ema50d": 214.8068405864433,
@@ -8441,7 +8441,7 @@
       1.35,
       1.96
     ],
-    "fetched_at": "2026-08-19 16:25:11",
+    "fetched_at": "2026-08-20 04:48:38",
     "fundamentals_fetched_at": "2026-08-17 15:38:40"
   },
   "EBGNG": {
