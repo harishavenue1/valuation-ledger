@@ -7025,10 +7025,10 @@
     "name": "Windlas Biotech Ltd",
     "base_url": "/company/WINDLAS",
     "consolidated": true,
-    "current_price": 965.0,
-    "pe_ratio": 30.0,
-    "market_cap_cr": 1993.0,
-    "week52_high": 1060.0,
+    "current_price": 958.0,
+    "pe_ratio": 29.8,
+    "market_cap_cr": 1978.0,
+    "week52_high": 1045.0,
     "ema20d": 888.4361713160679,
     "ema50d": 862.3939609151017,
     "ema33w": 846.9431117242355,
@@ -7337,7 +7337,7 @@
       7.12,
       7.58
     ],
-    "fetched_at": "2026-08-19 16:24:58",
+    "fetched_at": "2026-08-20 04:48:26",
     "fundamentals_fetched_at": "2026-08-17 14:26:47",
     "owned": true
   },
