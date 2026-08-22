@@ -8449,9 +8449,9 @@
     "name": "GNG Electronics Ltd",
     "base_url": "/company/EBGNG",
     "consolidated": true,
-    "current_price": 628.0,
-    "pe_ratio": 50.3,
-    "market_cap_cr": 7159.0,
+    "current_price": 606.0,
+    "pe_ratio": 48.5,
+    "market_cap_cr": 6911.0,
     "week52_high": 690.0,
     "ema20d": 559.587951162397,
     "ema50d": 538.3314509203935,
@@ -8746,7 +8746,7 @@
       3.7,
       2.54
     ],
-    "fetched_at": "2026-08-20 04:48:42",
+    "fetched_at": "2026-08-22 07:14:28",
     "fundamentals_fetched_at": "2026-08-17 15:46:52"
   },
   "MOREPENLAB": {
