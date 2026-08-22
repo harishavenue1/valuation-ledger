@@ -2069,9 +2069,9 @@
     "name": "Apollo Micro Systems Ltd",
     "base_url": "/company/APOLLO",
     "consolidated": true,
-    "current_price": 390.0,
-    "pe_ratio": 119.0,
-    "market_cap_cr": 14498.0,
+    "current_price": 385.0,
+    "pe_ratio": 118.0,
+    "market_cap_cr": 14290.0,
     "week52_high": 467.0,
     "ema20d": 393.21011899283207,
     "ema50d": 387.81539576981066,
@@ -2366,7 +2366,7 @@
       1.05,
       0.72
     ],
-    "fetched_at": "2026-08-20 04:47:39",
+    "fetched_at": "2026-08-22 07:13:23",
     "fundamentals_fetched_at": "2026-08-17 14:25:25",
     "owned": false
   },
